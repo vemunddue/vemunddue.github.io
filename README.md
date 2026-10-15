@@ -1,6 +1,6 @@
 # vemunddue.com
 
-A design system having a bad day. Plain HTML, CSS and JS, no build step.
+Interface studies: ordinary components under slightly wrong conditions. Plain HTML, CSS and JS, no build step.
 
 ## Run locally
 
