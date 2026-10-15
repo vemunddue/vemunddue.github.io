@@ -199,18 +199,16 @@ h1 {
   60% { transform: rotate(6deg) translateY(2px); }
 }
 
-/* 01 Select: helix */
-.helix-select {
-  --r: 128px;
+/* 01 Select: a chain of springs */
+.chain-select {
   --cw: 172px;
   position: absolute;
   top: 36px;
   left: 50%;
   width: 220px;
-  height: 400px;
+  height: 420px;
   transform: translateX(-50%);
   perspective: 900px;
-  perspective-origin: 50% 30%;
 }
 .select-trigger {
   position: relative;
@@ -231,17 +229,17 @@ h1 {
   cursor: pointer;
 }
 .select-trigger svg { flex: none; transition: transform 0.3s; }
-.helix-select.open .select-trigger svg { transform: rotate(180deg); }
-.helix {
+.chain-select.open .select-trigger svg { transform: rotate(180deg); }
+.chain {
   position: absolute;
-  top: 70px;
+  top: 50px;
   left: 50%;
   margin: 0;
   padding: 0;
   list-style: none;
   transform-style: preserve-3d;
 }
-.helix-option {
+.chain-option {
   position: absolute;
   top: 0;
   left: calc(var(--cw) / -2);
@@ -255,28 +253,22 @@ h1 {
   border-radius: 10px;
   box-shadow: 0 10px 20px rgb(0 0 0 / 0.08);
   cursor: pointer;
-  transform: translateY(-20px) rotateY(var(--a)) translateZ(0) scale(0.6);
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s, border-color 0.15s;
-  transition-delay: calc((5 - var(--i)) * 25ms);
+  transform-origin: 50% 0;
+  will-change: transform, opacity;
+  transition: border-color 0.15s;
 }
-.helix-select.open .helix-option {
-  transform: translateY(var(--y)) rotateY(var(--a)) translateZ(var(--r)) scale(1);
-  opacity: 1;
-  pointer-events: auto;
-  transition-delay: calc(var(--i) * 50ms), calc(var(--i) * 50ms), 0s;
-}
-.helix-option:hover,
-.helix-option:focus-visible { border-color: var(--text); outline: none; }
-.helix-option[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 20px rgb(0 0 0 / 0.08); }
+.chain-select.open .chain-option { pointer-events: auto; }
+.chain-option:hover,
+.chain-option:focus-visible { border-color: var(--text); outline: none; }
+.chain-option[aria-selected="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 10px 20px rgb(0 0 0 / 0.08); }
 .opt-label {
   display: inline-block;
   font: 600 15px/1.2 var(--font);
   color: var(--text);
   white-space: nowrap;
 }
-.opt-label.loose { animation: loose 0.42s ease-in-out; }
 
 /* 02 Button: a key with depth */
 .solid {
@@ -521,7 +513,7 @@ h1 {
   .placard .material { grid-column: 2; }
   .notes { grid-template-columns: minmax(0, 1fr); margin-top: 104px; }
   .notes ol { grid-template-columns: minmax(0, 1fr); }
-  .helix-select { --r: 92px; --cw: 150px; }
+  .chain-select { --cw: 156px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

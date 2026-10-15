@@ -269,87 +269,104 @@ document.querySelectorAll('[data-reset]').forEach((btn) => {
   requestAnimationFrame(frame);
 })();
 
-/* ---------- 01 Select: a helix, labels fall out ---------- */
+/* ---------- 01 Select: a bungee chain of springs ---------- */
 (() => {
   const stage = document.querySelector('[data-stage="select"]');
   const wrap = stage.querySelector('[data-select]');
   const trigger = stage.querySelector('[data-select-trigger]');
   const valueEl = stage.querySelector('[data-select-value]');
-  const helix = stage.querySelector('[data-helix]');
-  const options = [...helix.querySelectorAll('.helix-option')];
-  const stepAngle = 40;
-  const stepY = 48;
+  const options = [...stage.querySelectorAll('.chain-option')];
+  const gap = 48;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const links = options.map((o) => ({ o, x: 0, vx: 0, y: 0, vy: 0, tw: 0, vtw: 0 }));
   let open = false;
-  let looseTimer;
-  let spin = 0;
-  let paused = false;
-  let focusTarget = null;
+  let changedAt = 0;
+  let rootX = 0;
+  let rootTarget = 0;
+  let hovering = false;
   let last = performance.now();
+  let bob = 0;
+  let vbob = 0;
 
-  options.forEach((o, i) => {
-    o.__a = i * stepAngle;
-    o.style.setProperty('--a', `${o.__a}deg`);
-    o.style.setProperty('--y', `${i * stepY}px`);
-    o.style.setProperty('--i', i);
-  });
-
-  const facing = (o) => Math.cos(((o.__a + spin) * Math.PI) / 180) > 0.6;
+  // Springs: soft and bouncy on the way down, stiff on the way up
+  const DROP = { k: 220, c: 16 };
+  const LIFT = { k: 620, c: 32 };
+  const SWING = { k: 110, c: 8 };
+  const TWIST = { k: 70, c: 5 };
 
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.min(1 / 30, (now - last) / 1000);
     last = now;
-    if (focusTarget != null) {
-      const delta = ((focusTarget - spin + 540) % 360) - 180;
-      spin += delta * 0.14;
-    } else if (!paused && !reduced) {
-      spin -= 16 * dt;
-    }
-    helix.style.transform = `rotateY(${spin}deg)`;
+    const since = (now - changedAt) / 1000;
+
+    if (!hovering) rootTarget = open ? Math.sin(now / 1500) * 7 : 0;
+    rootX += (rootTarget - rootX) * (1 - Math.exp(-dt * 7));
+
+    // The trigger takes the weight: it dips when the chain drops and when it snaps back in
+    vbob += (-300 * bob - 14 * vbob) * dt;
+    bob += vbob * dt;
+    trigger.style.transform = reduced ? '' : `translateY(${bob.toFixed(2)}px) rotate(${(rootX * 0.03).toFixed(2)}deg)`;
+
+    links.forEach((L, i) => {
+      const prev = i === 0 ? { x: rootX, y: 0 } : links[i - 1];
+
+      // Vertical: each link hangs from the one above, so the stretch cascades down
+      const spring = open ? DROP : LIFT;
+      const delay = open ? i * 0.04 : (links.length - 1 - i) * 0.012;
+      const ty = open ? prev.y + gap : 0;
+      if (reduced) { L.y = open ? (i + 1) * gap : 0; L.vy = 0; }
+      else if (since > delay) {
+        L.vy += (spring.k * (ty - L.y) - spring.c * L.vy) * dt;
+        L.y += L.vy * dt;
+      }
+
+      // Horizontal: follow the link above, a little late
+      if (reduced) L.x = prev.x;
+      else {
+        L.vx += (SWING.k * (prev.x - L.x) - SWING.c * L.vx) * dt;
+        L.x += L.vx * dt;
+      }
+
+      // Twist: turns with sideways speed, plus a slow idle dangle
+      const idle = open && !reduced ? Math.sin(now / 1100 + i * 0.8) * 7 : 0;
+      const tTw = clamp(L.vx * 0.22, -38, 38) + idle;
+      L.vtw += (TWIST.k * (tTw - L.tw) - TWIST.c * L.vtw) * dt;
+      L.tw += L.vtw * dt;
+
+      const tilt = clamp((Math.atan2(L.x - prev.x, Math.max(8, L.y - prev.y)) * 180) / Math.PI, -35, 35);
+      const shown = clamp(L.y / gap, 0, 1);
+      L.o.style.transform = `translate3d(${L.x.toFixed(2)}px, ${L.y.toFixed(2)}px, 0) rotateZ(${(-tilt).toFixed(2)}deg) rotateY(${L.tw.toFixed(2)}deg) scale(${(0.7 + shown * 0.3).toFixed(3)})`;
+      L.o.style.opacity = shown.toFixed(3);
+    });
+
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
-  helix.addEventListener('pointerenter', () => { paused = true; });
-  helix.addEventListener('pointerleave', () => { paused = false; });
+  // The chain leans toward the pointer and whips when it moves
+  stage.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    hovering = true;
+    const r = wrap.getBoundingClientRect();
+    rootTarget = clamp((e.clientX - (r.left + r.width / 2)) * 0.22, -70, 70);
+    if (open) links[0].vx += clamp(e.movementX, -30, 30) * 3;
+  });
+  stage.addEventListener('pointerleave', () => { hovering = false; });
 
   function setOpen(next, focusFirst = false) {
+    if (open === next) return;
     open = next;
+    changedAt = performance.now();
     wrap.classList.toggle('open', next);
     trigger.setAttribute('aria-expanded', String(next));
-    clearTimeout(looseTimer);
-    if (!next) focusTarget = null;
-    if (next) {
-      looseTimer = setTimeout(loosen, 1800);
-      if (focusFirst) setTimeout(() => (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus(), 60);
-    }
-  }
-
-  function loosen() {
-    if (!open) return;
-    const candidates = options.filter((o) => o.querySelector('.opt-label') && facing(o));
-    if (candidates.length) {
-      const o = pick(candidates);
-      const label = o.querySelector('.opt-label');
-      label.classList.add('loose');
-      setTimeout(() => {
-        label.classList.remove('loose');
-        if (!open || label.parentNode !== o) return;
-        detach(label, stage, {
-          vx: rand(-60, 60),
-          vy: -20,
-          vr: rand(-90, 90),
-          vrx: rand(-200, 200),
-          vry: rand(-300, 300),
-          onRestore: (b) => o.appendChild(b.el),
-        });
-      }, reduced ? 0 : 420);
-    }
-    looseTimer = setTimeout(loosen, rand(1200, 2000));
+    vbob += next ? 70 : 110;
+    // A small kick so it never moves perfectly straight
+    links.forEach((L, i) => { L.vx += rand(-1, 1) * (next ? 60 : 30) * (i + 1) * 0.3; });
+    if (next && focusFirst) setTimeout(() => (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus(), 120);
   }
 
   function choose(o) {
-    const label = o.querySelector('.opt-label');
-    valueEl.textContent = label ? label.textContent : ' ';
+    valueEl.textContent = o.textContent.trim();
     options.forEach((x) => x.setAttribute('aria-selected', String(x === o)));
     setOpen(false);
     trigger.focus();
@@ -361,9 +378,7 @@ document.querySelectorAll('[data-reset]').forEach((btn) => {
   });
   options.forEach((o, i) => {
     o.addEventListener('click', () => choose(o));
-    // Keyboard focus turns the helix so the focused option faces you
-    o.addEventListener('focus', () => { focusTarget = -o.__a; });
-    o.addEventListener('blur', () => { focusTarget = null; });
+    o.addEventListener('focus', () => { links[i].vx += 90; });
     o.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown') { e.preventDefault(); options[Math.min(i + 1, options.length - 1)].focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); options[Math.max(i - 1, 0)].focus(); }
@@ -375,8 +390,6 @@ document.querySelectorAll('[data-reset]').forEach((btn) => {
   document.addEventListener('click', (e) => {
     if (open && !wrap.contains(e.target)) setOpen(false);
   });
-
-  stage.__beforeRepair = () => { if (!open) setOpen(true); };
 })();
 
 /* ---------- 02 Button: a key that shatters in 3D ---------- */
