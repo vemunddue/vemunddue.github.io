@@ -1,748 +1,862 @@
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const canHover = window.matchMedia('(hover: hover)').matches;
-const rand = (a, b) => a + Math.random() * (b - a);
-const pick = (list) => list[Math.floor(Math.random() * list.length)];
-const lerp = (a, b, t) => a + (b - a) * t;
-const nearest = (angle, step) => Math.round(angle / step) * step;
+const $ = (s, root = document) => root.querySelector(s);
+const $$ = (s, root = document) => [...root.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
 
-/* ---------- Physics ----------
-   Loose pieces are moved into their stage and simulated in stage coordinates,
-   tumbling in 3D on the way down. Each remembers where it came from. */
+const W = 1080;
+const H = 610;
+const _ = null;
 
-const GRAVITY = 2200;
-const bodies = new Set();
-let rafId = null;
-let lastTick = 0;
+/* ---------- Stations: old school meets disco-tech ----------
+   hat: c closed, o open · stab: a chord on that step */
 
-function heapFor(stage) {
-  const size = Math.ceil(stage.clientWidth / 4) + 1;
-  if (!stage.__heap || stage.__heap.length !== size) stage.__heap = new Float32Array(size);
-  return stage.__heap;
-}
+const Em7 = [64, 67, 71, 74];
+const Am7 = [69, 72, 76, 79];
+const Dm9 = [62, 65, 69, 72, 76];
 
-function heapRange(stage, x, w) {
-  const heap = heapFor(stage);
-  return [Math.max(0, Math.floor(x / 4)), Math.min(heap.length - 1, Math.ceil((x + w) / 4))];
-}
+const STATIONS = [
+  {
+    f: 904, name: 'Disco tech', bpm: 118, swing: 0,
+    kick:  'x...x...x...x...',
+    snare: '....x.......x...',
+    clap: true,
+    hat:   'c.o.c.o.c.o.c.oc',
+    bass: [40, _, 52, _, 40, _, 52, _, 43, _, 55, _, 45, _, 57, _],
+    stab: { 6: Em7, 14: Am7 },
+  },
+  {
+    f: 968, name: 'Electro funk', bpm: 110, swing: 0,
+    kick:  'x.....x...x.....',
+    snare: '....x.......x...',
+    clap: true,
+    hat:   'cccccccccccccccc',
+    cow:   '..x...x.x.....x.',
+    bass: [28, _, 40, _, _, 28, 40, _, 31, _, 43, _, 26, _, 38, _],
+    stab: { 0: Em7 },
+  },
+  {
+    f: 1015, name: 'Boom bap', bpm: 92, swing: 0.1,
+    kick:  'x......x.x......',
+    snare: '....x.......x...',
+    hat:   'c.c.c.c.c.c.c.cc',
+    bass: [33, _, _, _, _, _, _, 36, _, 33, _, _, _, _, 31, _],
+    stab: { 0: Dm9, 10: Dm9 },
+    soft: true,
+  },
+  {
+    f: 1055, name: 'Breakbeat', bpm: 98, swing: 0.06,
+    kick:  'x.x.......xx....x.x.......x..x..',
+    snare: '....x..g....x.......x..g......x.',
+    hat:   'c.c.c.c.c.c.c.c.c.c.c.c.c.c.c.o.',
+    bass: [28, _, _, _, _, _, _, _, _, _, 31, _, _, _, _, _, 28, _, _, _, _, _, _, _, _, _, 26, _, _, 26, _, _],
+  },
+];
 
-function heapHeight(stage, x, w) {
-  const heap = heapFor(stage);
-  const [a, b] = heapRange(stage, x, w);
-  let max = 0;
-  for (let i = a; i <= b; i++) max = Math.max(max, heap[i]);
-  return max;
-}
+const EQ_BANDS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
-function heapAdd(stage, x, w, top) {
-  const heap = heapFor(stage);
-  const [a, b] = heapRange(stage, x, w);
-  for (let i = a; i <= b; i++) heap[i] = Math.max(heap[i], top);
-}
+/* ---------- Audio graph ----------
+   sources → drive → filter → 10-band EQ → dry + echo + reverb → bass shelf → glue compressor → volume */
 
-function render(b) {
-  b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.r}deg) rotateX(${b.rx}deg) rotateY(${b.ry}deg)`;
-}
+let ctx = null;
+let master, shelf, analyser, musicBus, padBus, staticGain, noiseBuf;
+let driveIn, shaper, driveOut, filter, delay, delayFb, echoSend, reverbSend;
+const eqFilters = [];
+let freqData, timeData;
 
-function step(b, dt) {
-  const W = b.stage.clientWidth;
-  const H = b.stage.clientHeight;
-  b.vy += GRAVITY * dt;
-  b.x += b.vx * dt;
-  b.y += b.vy * dt;
-  b.r += b.vr * dt;
-  b.rx += b.vrx * dt;
-  b.ry += b.vry * dt;
+const fx = { filter: 0, echo: 0, reverb: 0.12, drive: 0.08, volume: 6 };
 
-  if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx) * 0.5; }
-  if (b.x > W - b.w) { b.x = W - b.w; b.vx = -Math.abs(b.vx) * 0.5; }
-
-  const floor = H - b.h - heapHeight(b.stage, b.x + b.w * 0.2, b.w * 0.6);
-  if (b.y < floor) { b.still = 0; return; }
-
-  b.y = floor;
-  if (b.vy > 140) {
-    b.vy = -b.vy * (b.round ? 0.42 : 0.28);
-    b.vx *= 0.85;
-    b.vr *= 0.6;
-    b.vrx *= 0.5;
-    b.vry *= 0.5;
-  } else {
-    b.vy = 0;
-    b.vx *= b.round ? 0.985 : 0.8;
+function ensureAudio() {
+  if (ctx) {
+    if (ctx.state === 'suspended') ctx.resume();
+    return;
   }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  ctx = new AC();
 
-  // Settle flat: face up or face down, never on an edge
-  const flat = nearest(b.r, 180);
-  const flatX = nearest(b.rx, 180);
-  const flatY = nearest(b.ry, 180);
-  b.rx += (flatX - b.rx) * 0.25;
-  b.ry += (flatY - b.ry) * 0.25;
-  b.vrx *= 0.6;
-  b.vry *= 0.6;
-  if (b.round) {
-    b.vr = (b.vx / (b.w / 2)) * (180 / Math.PI);
-  } else {
-    b.r += (flat - b.r) * 0.25;
-    b.vr *= 0.6;
+  noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+
+  musicBus = ctx.createGain();
+  musicBus.gain.value = 0;
+  padBus = ctx.createGain();
+  staticGain = ctx.createGain();
+  staticGain.gain.value = 0;
+
+  driveIn = ctx.createGain();
+  shaper = ctx.createWaveShaper();
+  shaper.oversample = '2x';
+  driveOut = ctx.createGain();
+  filter = ctx.createBiquadFilter();
+
+  let node = filter;
+  EQ_BANDS.forEach((f, i) => {
+    const b = ctx.createBiquadFilter();
+    b.type = i === 0 ? 'lowshelf' : i === EQ_BANDS.length - 1 ? 'highshelf' : 'peaking';
+    b.frequency.value = f;
+    b.Q.value = 1.3;
+    b.gain.value = Number($$('[data-geq] input')[i]?.value || 0);
+    node.connect(b);
+    node = b;
+    eqFilters.push(b);
+  });
+  const post = node;
+
+  const mix = ctx.createGain();
+  post.connect(mix);
+
+  // Echo: a tape-style delay, darker on every repeat
+  echoSend = ctx.createGain();
+  delay = ctx.createDelay(2);
+  delayFb = ctx.createGain();
+  const delayTone = ctx.createBiquadFilter();
+  delayTone.type = 'lowpass';
+  delayTone.frequency.value = 2600;
+  post.connect(echoSend).connect(delay);
+  delay.connect(delayTone).connect(delayFb).connect(delay);
+  delayTone.connect(mix);
+
+  // Reverb: a convolver fed with a generated impulse
+  reverbSend = ctx.createGain();
+  const verb = ctx.createConvolver();
+  verb.buffer = impulse(2.6, 2.4);
+  post.connect(reverbSend).connect(verb).connect(mix);
+
+  shelf = ctx.createBiquadFilter();
+  shelf.type = 'lowshelf';
+  shelf.frequency.value = 120;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16;
+  comp.ratio.value = 4;
+  comp.attack.value = 0.004;
+  comp.release.value = 0.18;
+  master = ctx.createGain();
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.smoothingTimeConstant = 0.7;
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  timeData = new Float32Array(analyser.fftSize);
+
+  [musicBus, padBus, staticGain].forEach((n) => n.connect(driveIn));
+  driveIn.connect(shaper).connect(driveOut).connect(filter);
+  mix.connect(shelf).connect(comp).connect(master).connect(analyser).connect(ctx.destination);
+
+  // Radio static, always running, faded in between stations
+  const hiss = ctx.createBufferSource();
+  hiss.buffer = noiseBuf;
+  hiss.loop = true;
+  const band = ctx.createBiquadFilter();
+  band.type = 'bandpass';
+  band.frequency.value = 2200;
+  band.Q.value = 0.6;
+  hiss.connect(band).connect(staticGain);
+  hiss.start();
+
+  Object.keys(fx).forEach(applyFx);
+  shelf.gain.value = bass ? 10 : 0;
+  updateDelayTime();
+}
+
+function impulse(seconds, decay) {
+  const len = Math.floor(ctx.sampleRate * seconds);
+  const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
   }
+  return buf;
+}
 
-  const level = (b.round || Math.abs(b.r - flat) < 1) && Math.abs(b.rx - flatX) < 1 && Math.abs(b.ry - flatY) < 1;
-  if (Math.abs(b.vx) < 6 && b.vy === 0 && level && ++b.still > 8) {
-    b.settled = true;
-    if (!b.round) b.r = flat;
-    b.rx = flatX;
-    b.ry = flatY;
-    heapAdd(b.stage, b.x + b.w * 0.15, b.w * 0.7, (H - b.y) * 0.96);
+function driveCurve(amount) {
+  const k = amount * 40;
+  const curve = new Float32Array(1024);
+  for (let i = 0; i < curve.length; i++) {
+    const x = (i / (curve.length - 1)) * 2 - 1;
+    curve[i] = ((1 + k) * x) / (1 + k * Math.abs(x));
+  }
+  return curve;
+}
+
+function applyFx(name) {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const v = fx[name];
+  if (name === 'volume') master.gain.setTargetAtTime(Math.pow(v / 10, 2) * 0.95, now, 0.03);
+  if (name === 'drive') {
+    shaper.curve = driveCurve(v);
+    driveIn.gain.setTargetAtTime(1 + v * 1.4, now, 0.03);
+    driveOut.gain.setTargetAtTime(1 / (1 + v * 1.1), now, 0.03);
+  }
+  if (name === 'echo') {
+    echoSend.gain.setTargetAtTime(v * 0.75, now, 0.03);
+    delayFb.gain.setTargetAtTime(0.15 + v * 0.6, now, 0.03);
+  }
+  if (name === 'reverb') reverbSend.gain.setTargetAtTime(v * 1.3, now, 0.03);
+  if (name === 'filter') {
+    // DJ filter: left of centre closes a low-pass, right of centre opens a high-pass
+    if (Math.abs(v) < 0.03) {
+      filter.type = 'lowpass';
+      filter.frequency.setTargetAtTime(20000, now, 0.02);
+      filter.Q.value = 0.7;
+    } else if (v < 0) {
+      filter.type = 'lowpass';
+      filter.frequency.setTargetAtTime(20000 * Math.pow(0.004, -v), now, 0.02);
+      filter.Q.value = 7;
+    } else {
+      filter.type = 'highpass';
+      filter.frequency.setTargetAtTime(20 * Math.pow(250, v), now, 0.02);
+      filter.Q.value = 7;
+    }
   }
 }
 
-function tick(now) {
-  const dt = Math.max(0, Math.min(0.032, (now - lastTick) / 1000));
-  lastTick = now;
-  let active = false;
-  for (const b of bodies) {
-    if (b.settled || b.tween) continue;
-    step(b, dt);
-    render(b);
-    active = true;
-  }
-  rafId = active ? requestAnimationFrame(tick) : null;
+function updateDelayTime() {
+  if (delay) delay.delayTime.setTargetAtTime((60 / station.bpm) * 0.75, ctx.currentTime, 0.1);
 }
 
-function wake() {
-  if (rafId) return;
-  lastTick = performance.now();
-  rafId = requestAnimationFrame(tick);
+/* ---------- Instruments ---------- */
+
+function env(g, t, peak, decay, attack = 0.002) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
 }
 
-function markDirty(stage, dirty = true) {
-  stage.parentNode.classList.toggle('dirty', dirty);
+function noise(t, dur) {
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  src.start(t, Math.random() * 1.5);
+  src.stop(t + dur);
+  return src;
 }
 
-function addBody(el, stage, o) {
-  el.classList.add('piece');
-  const b = {
-    el, stage,
-    x: o.x, y: o.y, r: o.rotation || 0, rx: 0, ry: 0,
-    ox: o.x, oy: o.y, or: o.rotation || 0,
-    vx: o.vx || 0, vy: o.vy || 0, vr: o.vr || 0, vrx: o.vrx || 0, vry: o.vry || 0,
-    w: el.offsetWidth, h: el.offsetHeight,
-    round: !!o.round,
-    onRestore: o.onRestore,
-    settled: false, still: 0, tween: false,
-  };
-  bodies.add(b);
-  render(b);
-  markDirty(stage);
-  if (reduced) {
-    for (let i = 0; i < 1500 && !b.settled; i++) step(b, 1 / 60);
-    render(b);
-  } else {
-    wake();
-  }
-  return b;
+function kick(t, p, v, out) {
+  const osc = ctx.createOscillator();
+  const g = ctx.createGain();
+  osc.frequency.setValueAtTime(160 * p, t);
+  osc.frequency.exponentialRampToValueAtTime(45 * p, t + 0.12);
+  env(g, t, 1.2 * v, 0.55);
+  osc.connect(g).connect(out);
+  osc.start(t);
+  osc.stop(t + 0.6);
+  // A short click so it cuts through
+  const c = noise(t, 0.02);
+  const cg = ctx.createGain();
+  env(cg, t, 0.12 * v, 0.012);
+  c.connect(cg).connect(out);
 }
 
-// Lift an element out of its parent, keep it visually in place, and let it fall
-function detach(el, stage, opts = {}) {
-  const sr = stage.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  const w = el.offsetWidth;
-  const h = el.offsetHeight;
-  el.style.width = `${w}px`;
-  el.style.height = `${h}px`;
-  stage.appendChild(el);
-  return addBody(el, stage, {
-    ...opts,
-    x: r.left + r.width / 2 - sr.left - w / 2,
-    y: r.top + r.height / 2 - sr.top - h / 2,
+function snare(t, p, v, out) {
+  const n = noise(t, 0.3);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1900;
+  bp.Q.value = 0.6;
+  const g = ctx.createGain();
+  env(g, t, 0.55 * v, 0.2);
+  n.connect(bp).connect(g).connect(out);
+  const tone = ctx.createOscillator();
+  tone.type = 'triangle';
+  tone.frequency.setValueAtTime(210 * p, t);
+  tone.frequency.exponentialRampToValueAtTime(160 * p, t + 0.08);
+  const tg = ctx.createGain();
+  env(tg, t, 0.6 * v, 0.13);
+  tone.connect(tg).connect(out);
+  tone.start(t);
+  tone.stop(t + 0.16);
+}
+
+function clap(t, v, out) {
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1400;
+  bp.Q.value = 0.9;
+  bp.connect(out);
+  [0, 0.011, 0.023].forEach((o, i) => {
+    const d = i === 2 ? 0.18 : 0.025;
+    const n = noise(t + o, d + 0.02);
+    const g = ctx.createGain();
+    env(g, t + o, 0.75 * v, d);
+    n.connect(g).connect(bp);
   });
 }
 
-function tweenHome(b, done) {
-  b.tween = true;
-  const sx = b.x, sy = b.y, sr = b.r, srx = b.rx, sry = b.ry;
-  const tr = b.or + nearest(sr - b.or, 360);
-  const trx = nearest(srx, 360);
-  const tryy = nearest(sry, 360);
-  const dur = reduced ? 0 : rand(700, 900);
-  const t0 = performance.now();
-  const frame = (now) => {
-    const t = dur ? Math.min(1, (now - t0) / dur) : 1;
-    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    b.x = lerp(sx, b.ox, e);
-    b.y = lerp(sy, b.oy, e) - Math.sin(Math.PI * t) * 70;
-    b.r = lerp(sr, tr, e);
-    b.rx = lerp(srx, trx, e);
-    b.ry = lerp(sry, tryy, e);
-    render(b);
-    if (t < 1) requestAnimationFrame(frame);
-    else done();
-  };
-  requestAnimationFrame(frame);
+function hat(t, v, open, out) {
+  const n = noise(t, open ? 0.3 : 0.06);
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 7000;
+  const g = ctx.createGain();
+  env(g, t, 0.18 * v, open ? 0.26 : 0.045);
+  n.connect(hp).connect(g).connect(out);
 }
 
-function repair(stage) {
-  stage.__beforeRepair?.();
-  const list = [...bodies].filter((b) => b.stage === stage && !b.tween);
-  const finish = () => {
-    heapFor(stage).fill(0);
-    stage.__afterRepair?.();
-    markDirty(stage, false);
-  };
-  if (!list.length) { finish(); return; }
-  let pending = list.length;
-  for (const b of list) {
-    tweenHome(b, () => {
-      bodies.delete(b);
-      b.el.classList.remove('piece');
-      b.el.style.cssText = '';
-      b.onRestore?.(b);
-      if (--pending === 0) finish();
+function bassNote(t, f, dur, out) {
+  const osc = ctx.createOscillator();
+  osc.type = 'sawtooth';
+  osc.frequency.value = f;
+  const sub = ctx.createOscillator();
+  sub.frequency.value = f / 2;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = 6;
+  lp.frequency.setValueAtTime(800, t);
+  lp.frequency.exponentialRampToValueAtTime(200, t + dur);
+  const g = ctx.createGain();
+  env(g, t, 0.26, dur, 0.01);
+  osc.connect(lp);
+  sub.connect(lp);
+  lp.connect(g).connect(out);
+  [osc, sub].forEach((o) => { o.start(t); o.stop(t + dur + 0.05); });
+}
+
+function stab(t, notes, soft, out) {
+  // A short, bright chord: detuned saws through a closing low-pass
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = 2;
+  lp.frequency.setValueAtTime(soft ? 1400 : 3200, t);
+  lp.frequency.exponentialRampToValueAtTime(soft ? 500 : 700, t + (soft ? 0.6 : 0.22));
+  const g = ctx.createGain();
+  env(g, t, soft ? 0.09 : 0.11, soft ? 0.7 : 0.26, 0.004);
+  lp.connect(g).connect(out);
+  notes.forEach((n) => {
+    [-6, 6].forEach((cents) => {
+      const o = ctx.createOscillator();
+      o.type = soft ? 'triangle' : 'sawtooth';
+      o.frequency.value = midi(n);
+      o.detune.value = cents;
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + (soft ? 0.75 : 0.3));
     });
+  });
+}
+
+function cowbell(t, out) {
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 800;
+  bp.Q.value = 3;
+  const g = ctx.createGain();
+  env(g, t, 0.22, 0.28);
+  bp.connect(g).connect(out);
+  [540, 800].forEach((f) => {
+    const o = ctx.createOscillator();
+    o.type = 'square';
+    o.frequency.value = f;
+    o.connect(bp);
+    o.start(t);
+    o.stop(t + 0.3);
+  });
+}
+
+/* ---------- Transport and sequencer ---------- */
+
+let playing = false;
+let stopping = false;
+let mode = 'play';
+let rate = 1;
+let targetRate = 1;
+let step = 0;
+let nextTime = 0;
+let recArmed = false;
+let bass = false;
+let clarity = 1;
+let station = STATIONS[0];
+const stepTimes = new Array(32).fill(0);
+const overdub = { kick: new Array(32).fill(false), snare: new Array(32).fill(false) };
+const visuals = [];
+
+const hitAt = (pattern, s) => pattern[s] === 'x' || pattern[s] === 'g' || pattern[s] === 'o';
+const length = () => station.kick.length;
+
+function scheduleStep(s, t) {
+  const base = 60 / station.bpm / 4;
+  const swing = s % 2 ? (station.swing * base) / rate : 0;
+  const tt = t + swing;
+  const p = clamp(rate, 0.25, 2);
+  stepTimes[s] = tt;
+
+  if (hitAt(station.kick, s) || overdub.kick[s]) {
+    kick(tt, p, 1, musicBus);
+    visuals.push({ t: tt, kind: 'kick' });
+  }
+  if (hitAt(station.snare, s) || overdub.snare[s]) {
+    const v = station.snare[s] === 'g' ? 0.3 : 1;
+    if (station.clap && !overdub.snare[s]) clap(tt, v, musicBus);
+    else snare(tt, p, v, musicBus);
+    visuals.push({ t: tt, kind: 'snare', v });
+  }
+  const h = station.hat[s];
+  if (h === 'c' || h === 'o') {
+    hat(tt, h === 'o' ? 0.8 : s % 2 ? 0.45 : 0.75, h === 'o', musicBus);
+    visuals.push({ t: tt, kind: 'hat' });
+  }
+  if (station.cow && station.cow[s] === 'x') cowbell(tt, musicBus);
+  const chord = station.stab && station.stab[s];
+  if (chord) {
+    stab(tt, chord.map((n) => n + 12 * Math.log2(p)), station.soft, musicBus);
+    visuals.push({ t: tt, kind: 'stab' });
+  }
+  const n = station.bass[s];
+  if (n != null) {
+    bassNote(tt, midi(n) * p, (base * 2.2) / rate, musicBus);
+    visuals.push({ t: tt, kind: 'bass' });
   }
 }
 
-document.querySelectorAll('[data-reset]').forEach((btn) => {
-  btn.addEventListener('click', () => repair(btn.parentNode.querySelector('[data-stage]')));
+setInterval(() => {
+  if (!ctx || !playing) return;
+  rate += (targetRate - rate) * 0.3;
+  while (nextTime < ctx.currentTime + 0.12) {
+    const len = length();
+    step %= len;
+    scheduleStep(step, nextTime);
+    nextTime += 60 / station.bpm / 4 / Math.max(rate, 0.08);
+    step = mode === 'rew' ? (step + len - 1) % len : (step + 1) % len;
+  }
+}, 25);
+
+function applyTuning() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  musicBus.gain.setTargetAtTime(playing && !stopping ? clarity : 0, now, 0.05);
+  staticGain.gain.setTargetAtTime(playing && !stopping ? (1 - clarity) * 0.3 : 0, now, 0.05);
+}
+
+function start(nextMode) {
+  ensureAudio();
+  mode = nextMode;
+  targetRate = mode === 'play' ? 1 : 1.75;
+  if (!playing || stopping) {
+    // A tape takes a moment to come up to speed
+    playing = true;
+    stopping = false;
+    rate = 0.3;
+    nextTime = ctx.currentTime + 0.05;
+    step = mode === 'rew' ? length() - 1 : 0;
+  }
+  applyTuning();
+  updateKeys();
+  announce(mode === 'play' ? `Playing ${station.name}` : mode === 'ff' ? 'Fast forward' : 'Rewind');
+}
+
+function stop() {
+  if (!playing) { eject(); return; }
+  // Tape stop: the pitch sags as the motor winds down
+  stopping = true;
+  targetRate = 0.1;
+  const now = ctx.currentTime;
+  musicBus.gain.setTargetAtTime(0, now + 0.25, 0.1);
+  staticGain.gain.setTargetAtTime(0, now, 0.05);
+  updateKeys();
+  announce('Stopped');
+  setTimeout(() => {
+    if (!stopping) return;
+    playing = false;
+    stopping = false;
+    updateKeys();
+  }, 600);
+}
+
+let ejectTimer;
+let flash = null;
+function eject() {
+  const door = $('[data-door]');
+  door.classList.add('ejected');
+  overdub.kick.fill(false);
+  overdub.snare.fill(false);
+  flash = { text: 'EJECT · LOOP CLEARED', until: performance.now() + 1500 };
+  announce('Ejected. Recorded hits cleared.');
+  clearTimeout(ejectTimer);
+  ejectTimer = setTimeout(() => door.classList.remove('ejected'), 1500);
+}
+
+/* ---------- Controls ---------- */
+
+const keys = Object.fromEntries($$('[data-key]').map((k) => [k.dataset.key, k]));
+const status = $('[data-status]');
+const announce = (text) => { status.textContent = text; };
+
+function updateKeys() {
+  const active = playing && !stopping;
+  keys.play.setAttribute('aria-pressed', String(active && mode === 'play'));
+  keys.ff.setAttribute('aria-pressed', String(active && mode === 'ff'));
+  keys.rew.setAttribute('aria-pressed', String(active && mode === 'rew'));
+  keys.rec.setAttribute('aria-pressed', String(recArmed));
+}
+
+keys.play.addEventListener('click', () => start('play'));
+keys.ff.addEventListener('click', () => start(mode === 'ff' && playing ? 'play' : 'ff'));
+keys.rew.addEventListener('click', () => start(mode === 'rew' && playing ? 'play' : 'rew'));
+keys.stop.addEventListener('click', stop);
+keys.rec.addEventListener('click', () => {
+  recArmed = !recArmed;
+  updateKeys();
+  announce(recArmed ? 'Record armed. Hit the woofers while playing.' : 'Record off');
 });
 
-/* ---------- Hero: extruded headline that turns toward the pointer ---------- */
-(() => {
-  const h1 = document.querySelector('[data-extrude]');
-  if (!h1 || reduced) return;
-  let tx = 0.15, ty = -0.2, cx = tx, cy = ty;
-  let lastMove = 0;
-  const layers = 11;
+// Seat every knob in a scale ring
+$$('.knob').forEach((k) => {
+  const seat = document.createElement('span');
+  seat.className = `knob-seat${k.classList.contains('knob-big') ? ' big' : ''}`;
+  k.replaceWith(seat);
+  seat.appendChild(k);
+});
 
-  window.addEventListener('pointermove', (e) => {
-    tx = e.clientX / window.innerWidth - 0.5;
-    ty = e.clientY / window.innerHeight - 0.5;
-    lastMove = performance.now();
-  });
-
-  function frame(now) {
-    // Without a pointer it drifts slowly on its own
-    if (!canHover || now - lastMove > 4000) {
-      tx = Math.sin(now / 2600) * 0.35;
-      ty = Math.cos(now / 3400) * 0.25 - 0.1;
-    }
-    cx += (tx - cx) * 0.06;
-    cy += (ty - cy) * 0.06;
-    const dx = -cx * 1.1;
-    const dy = -cy * 1.1 + 0.55;
-    const shadow = [];
-    for (let i = 1; i <= layers; i++) {
-      const color = i <= layers * 0.35 ? 'var(--accent)' : 'var(--accent-deep)';
-      shadow.push(`${(dx * i).toFixed(2)}px ${(dy * i).toFixed(2)}px 0 ${color}`);
-    }
-    shadow.push(`${(dx * layers * 1.6).toFixed(1)}px ${(dy * layers * 1.6 + 14).toFixed(1)}px 34px rgb(0 0 0 / 0.2)`);
-    h1.style.textShadow = shadow.join(', ');
-    h1.style.transform = `perspective(1400px) rotateX(${(-cy * 12).toFixed(2)}deg) rotateY(${(cx * 16).toFixed(2)}deg)`;
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-
-/* ---------- Stages tilt toward the pointer ---------- */
-(() => {
-  if (reduced || !canHover) return;
-  const frames = [...document.querySelectorAll('.frame')].map((f) => ({
-    f, stage: f.querySelector('[data-stage]'), tx: 0, ty: 0, cx: 0, cy: 0,
-  }));
-  frames.forEach((s) => {
-    s.f.addEventListener('pointermove', (e) => {
-      const r = s.f.getBoundingClientRect();
-      s.tx = (e.clientX - r.left) / r.width - 0.5;
-      s.ty = (e.clientY - r.top) / r.height - 0.5;
-    });
-    s.f.addEventListener('pointerleave', () => { s.tx = 0; s.ty = 0; });
-  });
-  function frame() {
-    for (const s of frames) {
-      s.cx += (s.tx - s.cx) * 0.07;
-      s.cy += (s.ty - s.cy) * 0.07;
-      s.stage.style.transform = `rotateX(${(-s.cy * 6).toFixed(2)}deg) rotateY(${(s.cx * 8).toFixed(2)}deg)`;
-    }
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-
-/* ---------- 01 Select: a bungee chain of springs ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="select"]');
-  const wrap = stage.querySelector('[data-select]');
-  const trigger = stage.querySelector('[data-select-trigger]');
-  const valueEl = stage.querySelector('[data-select-value]');
-  const options = [...stage.querySelectorAll('.chain-option')];
-  const gap = 48;
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-  const links = options.map((o) => ({ o, x: 0, vx: 0, y: 0, vy: 0, tw: 0, vtw: 0 }));
-  let open = false;
-  let changedAt = 0;
-  let rootX = 0;
-  let rootTarget = 0;
-  let hovering = false;
-  let last = performance.now();
-  let bob = 0;
-  let vbob = 0;
-
-  // Springs: soft and bouncy on the way down, stiff on the way up
-  const DROP = { k: 220, c: 16 };
-  const LIFT = { k: 620, c: 32 };
-  const SWING = { k: 110, c: 8 };
-  const TWIST = { k: 70, c: 5 };
-
-  function frame(now) {
-    const dt = Math.min(1 / 30, (now - last) / 1000);
-    last = now;
-    const since = (now - changedAt) / 1000;
-
-    if (!hovering) rootTarget = open ? Math.sin(now / 1500) * 7 : 0;
-    rootX += (rootTarget - rootX) * (1 - Math.exp(-dt * 7));
-
-    // The trigger takes the weight: it dips when the chain drops and when it snaps back in
-    vbob += (-300 * bob - 14 * vbob) * dt;
-    bob += vbob * dt;
-    trigger.style.transform = reduced ? '' : `translateY(${bob.toFixed(2)}px) rotate(${(rootX * 0.03).toFixed(2)}deg)`;
-
-    links.forEach((L, i) => {
-      const prev = i === 0 ? { x: rootX, y: 0 } : links[i - 1];
-
-      // Vertical: each link hangs from the one above, so the stretch cascades down
-      const spring = open ? DROP : LIFT;
-      const delay = open ? i * 0.04 : (links.length - 1 - i) * 0.012;
-      const ty = open ? prev.y + gap : 0;
-      if (reduced) { L.y = open ? (i + 1) * gap : 0; L.vy = 0; }
-      else if (since > delay) {
-        L.vy += (spring.k * (ty - L.y) - spring.c * L.vy) * dt;
-        L.y += L.vy * dt;
-      }
-
-      // Horizontal: follow the link above, a little late
-      if (reduced) L.x = prev.x;
-      else {
-        L.vx += (SWING.k * (prev.x - L.x) - SWING.c * L.vx) * dt;
-        L.x += L.vx * dt;
-      }
-
-      // Twist: turns with sideways speed, plus a slow idle dangle
-      const idle = open && !reduced ? Math.sin(now / 1100 + i * 0.8) * 7 : 0;
-      const tTw = clamp(L.vx * 0.22, -38, 38) + idle;
-      L.vtw += (TWIST.k * (tTw - L.tw) - TWIST.c * L.vtw) * dt;
-      L.tw += L.vtw * dt;
-
-      const tilt = clamp((Math.atan2(L.x - prev.x, Math.max(8, L.y - prev.y)) * 180) / Math.PI, -35, 35);
-      const shown = clamp(L.y / gap, 0, 1);
-      L.o.style.transform = `translate3d(${L.x.toFixed(2)}px, ${L.y.toFixed(2)}px, 0) rotateZ(${(-tilt).toFixed(2)}deg) rotateY(${L.tw.toFixed(2)}deg) scale(${(0.7 + shown * 0.3).toFixed(3)})`;
-      L.o.style.opacity = shown.toFixed(3);
-    });
-
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-
-  // The chain leans toward the pointer and whips when it moves
-  stage.addEventListener('pointermove', (e) => {
-    if (e.pointerType !== 'mouse') return;
-    hovering = true;
-    const r = wrap.getBoundingClientRect();
-    rootTarget = clamp((e.clientX - (r.left + r.width / 2)) * 0.22, -70, 70);
-    if (open) links[0].vx += clamp(e.movementX, -30, 30) * 3;
-  });
-  stage.addEventListener('pointerleave', () => { hovering = false; });
-
-  function setOpen(next, focusFirst = false) {
-    if (open === next) return;
-    open = next;
-    changedAt = performance.now();
-    wrap.classList.toggle('open', next);
-    trigger.setAttribute('aria-expanded', String(next));
-    vbob += next ? 70 : 110;
-    // A small kick so it never moves perfectly straight
-    links.forEach((L, i) => { L.vx += rand(-1, 1) * (next ? 60 : 30) * (i + 1) * 0.3; });
-    if (next && focusFirst) setTimeout(() => (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus(), 120);
-  }
-
-  function choose(o) {
-    valueEl.textContent = o.textContent.trim();
-    options.forEach((x) => x.setAttribute('aria-selected', String(x === o)));
-    setOpen(false);
-    trigger.focus();
-  }
-
-  trigger.addEventListener('click', (e) => setOpen(!open, e.detail === 0));
-  trigger.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown' && !open) { e.preventDefault(); setOpen(true, true); }
-  });
-  options.forEach((o, i) => {
-    o.addEventListener('click', () => choose(o));
-    o.addEventListener('focus', () => { links[i].vx += 90; });
-    o.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowDown') { e.preventDefault(); options[Math.min(i + 1, options.length - 1)].focus(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); options[Math.max(i - 1, 0)].focus(); }
-      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); choose(o); }
-      else if (e.key === 'Escape') { setOpen(false); trigger.focus(); }
-      else if (e.key === 'Tab') setOpen(false);
-    });
-  });
-  document.addEventListener('click', (e) => {
-    if (open && !wrap.contains(e.target)) setOpen(false);
-  });
-})();
-
-/* ---------- 02 Button: a key that shatters in 3D ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="button"]');
-  const btn = stage.querySelector('[data-shatter]');
-  const depth = 10;
-  let broken = false;
-
-  function shatter() {
-    const sr = stage.getBoundingClientRect();
-    const br = btn.getBoundingClientRect();
-    const W = btn.offsetWidth;
-    const H = btn.offsetHeight + depth;
-    const left = br.left + br.width / 2 - sr.left - W / 2;
-    const top = br.top - sr.top;
-    const c = [W * rand(0.4, 0.6), H * rand(0.35, 0.6)];
-    const rim = [
-      [0, 0], [W * rand(0.22, 0.42), 0], [W, 0], [W, H * rand(0.35, 0.7)],
-      [W, H], [W * rand(0.5, 0.78), H], [0, H], [0, H * rand(0.3, 0.6)],
-    ];
-    const shards = [[1, 2, 3], [3, 4, 5], [5, 6, 7], [7, 0, 1]].map((idx) => [c, ...idx.map((i) => rim[i])]);
-
-    btn.classList.remove('pressed');
-    shards.forEach((pts) => {
-      const xs = pts.map((p) => p[0]);
-      const ys = pts.map((p) => p[1]);
-      const bx = Math.min(...xs), by = Math.min(...ys);
-      const bw = Math.max(...xs) - bx, bh = Math.max(...ys) - by;
-      const shard = document.createElement('div');
-      shard.className = 'shard';
-      shard.setAttribute('aria-hidden', 'true');
-      shard.style.width = `${bw}px`;
-      shard.style.height = `${bh}px`;
-      const inner = btn.cloneNode(true);
-      inner.removeAttribute('data-shatter');
-      inner.tabIndex = -1;
-      inner.style.left = `${-bx}px`;
-      inner.style.top = `${-by}px`;
-      inner.style.width = `${W}px`;
-      inner.style.height = `${H - depth}px`;
-      // The key's side is part of the shard, so each piece keeps its thickness
-      inner.style.boxShadow = `0 ${depth}px 0 var(--accent-deep)`;
-      inner.style.clipPath = `polygon(${pts.map((p) => `${p[0]}px ${p[1]}px`).join(', ')})`;
-      shard.appendChild(inner);
-      stage.appendChild(shard);
-      const mx = bx + bw / 2 - c[0];
-      const my = by + bh / 2 - c[1];
-      addBody(shard, stage, {
-        x: left + bx,
-        y: top + by,
-        vx: mx * 6 + rand(-60, 60),
-        vy: -rand(380, 620) + my * 5,
-        vr: rand(-260, 260),
-        vrx: rand(-520, 520),
-        vry: rand(-520, 520),
-        onRestore: (b) => b.el.remove(),
-      });
-    });
-    btn.style.visibility = 'hidden';
-  }
-
-  function crack() {
-    const sr = stage.getBoundingClientRect();
-    const br = btn.getBoundingClientRect();
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('class', 'crack');
-    svg.setAttribute('width', br.width);
-    svg.setAttribute('height', br.height);
-    svg.style.left = `${br.left - sr.left}px`;
-    svg.style.top = `${br.top - sr.top}px`;
-    const cx = br.width * 0.5, cy = br.height * 0.5;
-    const path = document.createElementNS(ns, 'path');
-    path.setAttribute('d', `M${cx} ${cy} L${br.width * 0.3} 0 M${cx} ${cy} L${br.width} ${br.height * 0.55} M${cx} ${cy} L${br.width * 0.65} ${br.height} M${cx} ${cy} L0 ${br.height * 0.45}`);
-    svg.appendChild(path);
-    stage.appendChild(svg);
-    return svg;
-  }
-
-  btn.addEventListener('click', () => {
-    if (broken) return;
-    broken = true;
-    btn.classList.add('pressed');
-    setTimeout(() => {
-      const lines = crack();
-      setTimeout(() => { lines.remove(); shatter(); }, reduced ? 0 : 170);
-    }, reduced ? 0 : 90);
-  });
-
-  stage.__afterRepair = () => {
-    btn.style.visibility = '';
-    broken = false;
+// Rotary knobs: drag up and down, arrow keys, double-click to reset
+let dragging = false;
+function makeKnob(el, { min, max, value, step, format, onChange, detent }) {
+  const range = max - min;
+  let v = value;
+  const set = (next, silent = false) => {
+    v = clamp(next, min, max);
+    if (detent != null && Math.abs(v - detent) < range * 0.025) v = detent;
+    el.style.setProperty('--rot', `${-135 + ((v - min) / range) * 270}deg`);
+    el.setAttribute('aria-valuemin', min);
+    el.setAttribute('aria-valuemax', max);
+    el.setAttribute('aria-valuenow', +v.toFixed(2));
+    el.setAttribute('aria-valuetext', format(v));
+    if (!silent) onChange(v);
   };
-})();
-
-/* ---------- 03 Switch: the sphere overshoots the track ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="switch"]');
-  const sw = stage.querySelector('[data-switch]');
-  const knob = stage.querySelector('[data-knob]');
-
-  sw.addEventListener('click', () => {
-    const on = sw.getAttribute('aria-checked') !== 'true';
-    sw.setAttribute('aria-checked', String(on));
-    if (!on || knob.parentNode !== sw) return;
-    setTimeout(() => {
-      if (sw.getAttribute('aria-checked') !== 'true' || knob.parentNode !== sw) return;
-      detach(knob, stage, {
-        round: true,
-        vx: 360,
-        vy: -60,
-        onRestore: (b) => sw.appendChild(b.el),
-      });
-    }, reduced ? 0 : 190);
+  let drag = null;
+  el.addEventListener('pointerdown', (e) => {
+    el.setPointerCapture(e.pointerId);
+    drag = { y: e.clientY, v };
+    dragging = true;
   });
-})();
+  el.addEventListener('pointermove', (e) => {
+    if (drag) set(drag.v + ((drag.y - e.clientY) / 180) * range);
+  });
+  const end = () => { drag = null; dragging = false; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('dblclick', () => set(value));
+  el.addEventListener('keydown', (e) => {
+    const moves = { ArrowUp: step, ArrowRight: step, ArrowDown: -step, ArrowLeft: -step, PageUp: step * 5, PageDown: -step * 5 };
+    if (e.key in moves) { e.preventDefault(); set(v + moves[e.key]); }
+    else if (e.key === 'Home') { e.preventDefault(); set(min); }
+    else if (e.key === 'End') { e.preventDefault(); set(max); }
+  });
+  set(value, true);
+  return { set };
+}
 
-/* ---------- 04 Text field: a solid you can turn ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="field"]');
-  const box = stage.querySelector('[data-box]');
-  const input = stage.querySelector('[data-field-input]');
-  const backText = stage.querySelector('[data-back-text]');
-  const rest = { x: -16, y: -24 };
-  let rx = rest.x, ry = rest.y;
-  let vrx = 0, vry = 0;
-  let down = null;
-  let dragging = false;
-  let idleSince = performance.now();
-  let returning = false;
+const pct = (v) => `${Math.round(v * 100)} percent`;
+const knobs = {
+  filter: makeKnob($('[data-knob="filter"]'), {
+    min: -1, max: 1, value: 0, step: 0.05, detent: 0,
+    format: (v) => (v === 0 ? 'Open' : v < 0 ? `Low-pass, ${Math.round(-v * 100)} percent` : `High-pass, ${Math.round(v * 100)} percent`),
+    onChange: (v) => { fx.filter = v; applyFx('filter'); },
+  }),
+  echo: makeKnob($('[data-knob="echo"]'), {
+    min: 0, max: 1, value: 0, step: 0.05, format: pct,
+    onChange: (v) => { fx.echo = v; applyFx('echo'); },
+  }),
+  reverb: makeKnob($('[data-knob="reverb"]'), {
+    min: 0, max: 1, value: 0.12, step: 0.05, format: pct,
+    onChange: (v) => { fx.reverb = v; applyFx('reverb'); },
+  }),
+  drive: makeKnob($('[data-knob="drive"]'), {
+    min: 0, max: 1, value: 0.08, step: 0.05, format: pct,
+    onChange: (v) => { fx.drive = v; applyFx('drive'); },
+  }),
+  volume: makeKnob($('[data-knob="volume"]'), {
+    min: 0, max: 10, value: 6, step: 0.5, format: (v) => `${Math.round(v)} of 10`,
+    onChange: (v) => { fx.volume = v; applyFx('volume'); },
+  }),
+};
 
+// Tuner: a range input on the dial and a knob next to it, kept in step
+const tuning = $('[data-tuning]');
+const tunerEl = $('[data-tuner]');
+const lcdFreq = $('[data-lcd-freq]');
+const lamp = $('[data-lamp]');
+
+function onTune(fromKnob = false) {
+  const v = Number(tuning.value);
+  const nearest = STATIONS.reduce((a, b) => (Math.abs(b.f - v) < Math.abs(a.f - v) ? b : a));
+  clarity = clamp(1 - (Math.abs(nearest.f - v) - 3) / 12, 0, 1);
+  if (nearest !== station) {
+    station = nearest;
+    updateDelayTime();
+  }
+  tunerEl.style.setProperty('--tune', (v - 880) / 200);
+  const mhz = (v / 10).toFixed(1);
+  lcdFreq.textContent = `FM ${mhz}`;
+  tuning.setAttribute('aria-valuetext', `${mhz} megahertz${clarity > 0.85 ? `, ${nearest.name}` : ''}`);
+  lamp.classList.toggle('on', clarity > 0.85);
+  if (!fromKnob) tuneKnob.set(v, true);
+  applyTuning();
+}
+const tuneKnob = makeKnob($('[data-knob="tune"]'), {
+  min: 880, max: 1080, value: 904, step: 1,
+  format: (v) => `${(v / 10).toFixed(1)} megahertz`,
+  onChange: (v) => { tuning.value = Math.round(v); onTune(true); },
+});
+tuning.addEventListener('input', () => onTune());
+onTune();
+
+// Graphic equalizer: ten range inputs standing on end
+const geq = $('[data-geq]');
+EQ_BANDS.forEach((f, i) => {
+  const wrap = document.createElement('div');
+  wrap.className = 'fader';
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.min = -12;
+  input.max = 12;
+  input.step = 1;
+  input.value = 0;
+  const label = f >= 1000 ? `${f / 1000}k` : `${f}`;
+  input.setAttribute('aria-label', `Equalizer ${label}Hz`);
+  input.setAttribute('aria-valuetext', '0 decibels');
   input.addEventListener('input', () => {
-    backText.textContent = input.value || input.placeholder;
+    input.setAttribute('aria-valuetext', `${input.value} decibels`);
+    if (eqFilters[i]) eqFilters[i].gain.setTargetAtTime(Number(input.value), ctx.currentTime, 0.02);
   });
+  input.addEventListener('dblclick', () => { input.value = 0; input.dispatchEvent(new Event('input')); });
+  const span = document.createElement('span');
+  span.textContent = label;
+  span.setAttribute('aria-hidden', 'true');
+  wrap.append(input, span);
+  geq.appendChild(wrap);
+});
 
-  stage.addEventListener('pointerdown', (e) => {
+// Bass boost
+const bassSwitch = $('[data-bass]');
+const boombox = $('[data-boombox]');
+bassSwitch.addEventListener('click', () => {
+  bass = !bass;
+  bassSwitch.setAttribute('aria-checked', String(bass));
+  boombox.classList.toggle('bass', bass);
+  if (ctx) shelf.gain.setTargetAtTime(bass ? 10 : 0, ctx.currentTime, 0.05);
+  speakers.forEach((s) => s.waves.push({ t0: performance.now(), s: 1.4 }));
+});
+
+// Tape counter and label
+const digits = $$('[data-counter] .strip');
+let counter = 0;
+$('[data-counter-reset]').addEventListener('click', () => { counter = 0; });
+const tapeLabel = $('[data-tape-label]');
+
+/* ---------- Speakers: woofers are pads, grilles are checkboxes ---------- */
+
+let shake = 0;
+const speakers = $$('[data-speaker]').map((el) => {
+  const grille = $('[data-grille]', el);
+  const cone = $('[data-cone]', el);
+  const dots = [];
+  const c = 146;
+  for (let y = -140; y <= 140; y += 10) {
+    for (let x = -140; x <= 140; x += 10) {
+      const r = Math.hypot(x, y);
+      if (r < 80 || r > 138 || Math.abs(y) < 12) continue;
+      const dot = document.createElement('input');
+      dot.type = 'checkbox';
+      dot.className = 'grille-dot';
+      dot.tabIndex = -1;
+      dot.setAttribute('aria-hidden', 'true');
+      dot.style.left = `${c + x}px`;
+      dot.style.top = `${c + y}px`;
+      grille.appendChild(dot);
+      dots.push({ el: dot, r, on: false });
+    }
+  }
+  return { el, cone, dots, kind: el.dataset.speaker, pump: 0, waves: [] };
+});
+
+function fire(kind, v = 1) {
+  const now = performance.now();
+  if (kind === 'kick') {
+    speakers[0].pump = Math.max(speakers[0].pump, v);
+    speakers[0].waves.push({ t0: now, s: v });
+    shake = Math.max(shake, v);
+  } else if (kind === 'snare') {
+    speakers[1].pump = Math.max(speakers[1].pump, v * 0.8);
+    speakers[1].waves.push({ t0: now, s: v });
+  } else if (kind === 'bass') {
+    speakers.forEach((s) => { s.pump = Math.max(s.pump, 0.35); });
+  } else if (kind === 'stab') {
+    speakers.forEach((sp) => sp.waves.push({ t0: now, s: 0.6 }));
+  } else if (kind === 'hat') {
+    speakers.forEach((s) => { s.sparkle = now; });
+  }
+}
+
+function hitPad(sp) {
+  ensureAudio();
+  const t = ctx.currentTime + 0.004;
+  if (sp.kind === 'kick') kick(t, 1, 1, padBus);
+  else snare(t, 1, 1, padBus);
+  fire(sp.kind);
+  // Recording: land the hit on the nearest step of the loop
+  if (recArmed && playing && !stopping) {
+    const len = length();
+    let best = 0;
+    for (let s = 1; s < len; s++) if (Math.abs(stepTimes[s] - t) < Math.abs(stepTimes[best] - t)) best = s;
+    overdub[sp.kind][best] = true;
+  }
+}
+
+speakers.forEach((sp) => {
+  let fromPointer = false;
+  sp.cone.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-    down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, id: e.pointerId };
-    dragging = false;
+    fromPointer = true;
+    hitPad(sp);
   });
+  sp.cone.addEventListener('click', () => {
+    if (fromPointer) { fromPointer = false; return; }
+    hitPad(sp);
+  });
+});
 
-  stage.addEventListener('pointermove', (e) => {
-    if (!down) return;
-    if (!dragging && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) {
-      dragging = true;
-      returning = false;
-      stage.setPointerCapture(e.pointerId);
-      stage.classList.add('dragging');
-      input.blur();
-      window.getSelection()?.removeAllRanges();
-      markDirty(stage);
+/* ---------- Scene: fit, parallax, chrome shine ---------- */
+
+const stageEl = $('[data-stage]');
+const scene = $('[data-scene]');
+const chrome = $('[data-chrome]');
+
+function fit() {
+  const scale = Math.min(1, (stageEl.clientWidth - 16) / (W + 170));
+  scene.style.transform = `scale(${scale})`;
+  scene.style.top = `${104 * scale}px`;
+  stageEl.style.height = `${(H + 104 + 160) * scale}px`;
+}
+fit();
+window.addEventListener('resize', fit);
+
+let tx = 0, ty = 0, cx = 0, cy = 0;
+let lastPointer = 0;
+window.addEventListener('pointermove', (e) => {
+  if (dragging) return;
+  tx = e.clientX / window.innerWidth - 0.5;
+  ty = e.clientY / window.innerHeight - 0.5;
+  lastPointer = performance.now();
+});
+
+/* ---------- Render loop ---------- */
+
+const bars = Array.from({ length: 16 }, () => {
+  const i = document.createElement('i');
+  $('[data-spectrum]').appendChild(i);
+  return i;
+});
+const vu = $('[data-vu]');
+const lcdInfo = $('[data-lcd-info]');
+const reels = $$('[data-reel]');
+const hubs = reels.map((r) => $('.hub', r));
+let vuAngle = -48;
+let reelAngle = 0;
+let lastFrame = performance.now();
+let lastInfo = '';
+let lastCount = -1;
+
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000);
+  lastFrame = now;
+
+  // Parallax: drift on its own when nobody is pointing
+  if (!reduced) {
+    if (now - lastPointer > 5000) {
+      tx = Math.sin(now / 3200) * 0.3;
+      ty = Math.cos(now / 4100) * 0.2;
     }
-    if (!dragging) return;
-    e.preventDefault();
-    vry = (e.clientX - down.lx) * 0.5;
-    vrx = -(e.clientY - down.ly) * 0.5;
-    ry += vry;
-    rx += vrx;
-    down.lx = e.clientX;
-    down.ly = e.clientY;
-  });
+    cx += (tx - cx) * 0.05;
+    cy += (ty - cy) * 0.05;
+  }
+  shake *= Math.exp(-dt * 14);
+  const lift = bass ? 5 : 2.5;
+  boombox.style.transform = `translateY(${(shake * lift).toFixed(2)}px) rotateX(${(-12 - cy * 6).toFixed(2)}deg) rotateY(${(26 + cx * 12).toFixed(2)}deg)`;
+  boombox.style.setProperty('--kx', (-(26 + cx * 12) / 7).toFixed(2));
+  chrome.style.setProperty('--shine', `${(40 + cy * 40 + cx * 12).toFixed(1)}%`);
 
-  const release = () => {
-    down = null;
-    if (!dragging) return;
-    dragging = false;
-    stage.classList.remove('dragging');
-    idleSince = performance.now();
-    if (reduced) { vrx = 0; vry = 0; }
-  };
-  stage.addEventListener('pointerup', release);
-  stage.addEventListener('pointercancel', release);
+  // Fire beat visuals in time with the audio clock
+  if (ctx) {
+    visuals.sort((a, b) => a.t - b.t);
+    while (visuals.length && visuals[0].t <= ctx.currentTime) {
+      const v = visuals.shift();
+      fire(v.kind, v.v ?? 1);
+    }
+  }
 
-  // A double click puts it back facing you
-  stage.addEventListener('dblclick', (e) => {
-    if (e.target !== input) repair(stage);
-  });
-
-  function frame(now) {
-    if (!dragging) {
-      rx += vrx;
-      ry += vry;
-      vrx *= 0.95;
-      vry *= 0.95;
-      const slow = Math.abs(vrx) + Math.abs(vry) < 0.1;
-      if (returning || (slow && now - idleSince > 2500)) {
-        const k = returning ? 0.1 : 0.03;
-        const tx = rest.x + nearest(rx - rest.x, 360);
-        const ty = rest.y + nearest(ry - rest.y, 360);
-        rx += (tx - rx) * k;
-        ry += (ty - ry) * k;
-        if (Math.abs(tx - rx) + Math.abs(ty - ry) < 0.2) returning = false;
+  // Speakers: cones pump, grille checkboxes light in rings
+  for (const sp of speakers) {
+    sp.pump *= Math.exp(-dt * 10);
+    sp.cone.style.setProperty('--pump', (1 + sp.pump * (bass ? 0.13 : 0.07)).toFixed(3));
+    sp.waves = sp.waves.filter((w) => now - w.t0 < 520);
+    const sparkle = sp.sparkle && now - sp.sparkle < 60;
+    for (const d of sp.dots) {
+      let on = false;
+      for (const w of sp.waves) {
+        const r = 80 + ((now - w.t0) / 420) * 62 * Math.min(1.3, w.s);
+        if (Math.abs(d.r - r) < 6) { on = true; break; }
       }
+      if (!on && sparkle && Math.random() < 0.04) on = true;
+      if (on !== d.on) { d.on = on; d.el.checked = on; }
     }
-    box.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-
-  stage.__afterRepair = () => {
-    vrx = 0;
-    vry = 0;
-    returning = true;
-  };
-})();
-
-/* ---------- 05 Slider: the track sags, and snaps if shaken ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="slider"]');
-  const rope = stage.querySelector('[data-rope]');
-  const input = stage.querySelector('[data-rope-input]');
-  const handle = stage.querySelector('[data-rope-handle]');
-  const paths = ['a', 'b', 'sa', 'sb'].map((k) => stage.querySelector(`[data-rope-${k}]`));
-  const out = stage.querySelector('[data-rope-out]');
-  const y0 = 30;
-  const radius = 16;
-  let sag = 0;
-  let vel = 0;
-  let energy = 0;
-  let last = Number(input.value);
-  let snapped = null;
-
-  function draw(a, b) {
-    paths[0].setAttribute('d', a);
-    paths[1].setAttribute('d', b);
-    paths[2].setAttribute('d', a);
-    paths[3].setAttribute('d', b);
   }
 
-  function frame(now) {
-    const W = rope.clientWidth;
-    const x = (input.value / 100) * W;
-    if (!snapped) {
-      const target = 115 * Math.sin((Math.PI * input.value) / 100);
-      vel = (vel + (target - sag) * 0.09) * 0.86;
-      sag += reduced ? target - sag : vel;
-      const hy = y0 + sag;
-      draw(
-        `M0 ${y0} C ${x * 0.45} ${y0} ${x * 0.7} ${hy} ${x} ${hy}`,
-        `M${x} ${hy} C ${x + (W - x) * 0.3} ${hy} ${x + (W - x) * 0.55} ${y0} ${W} ${y0}`,
-      );
-      if (handle.parentNode === rope) handle.style.transform = `translate(${x - radius}px, ${hy - radius}px)`;
-      energy *= 0.965;
-    } else {
-      const el = now - snapped.t0;
-      const t = reduced ? 1 : Math.min(1, el / 900);
-      const e = 1 - Math.pow(1 - t, 3);
-      const sway = reduced ? 0 : Math.sin(el / 160) * 14 * Math.exp(-el / 700);
-      const lx = lerp(snapped.x, 6 + sway, e);
-      const ly = lerp(snapped.y, y0 + Math.min(snapped.x * 0.9, 400), e);
-      const rx = lerp(snapped.x, W - 6 - sway, e);
-      const ry = lerp(snapped.y, y0 + Math.min((W - snapped.x) * 0.9, 400), e);
-      draw(
-        `M0 ${y0} Q ${lx * 0.5} ${(y0 + ly) / 2 + 12} ${lx} ${ly}`,
-        `M${W} ${y0} Q ${W - (W - rx) * 0.5} ${(y0 + ry) / 2 + 12} ${rx} ${ry}`,
-      );
-    }
-    requestAnimationFrame(frame);
+  // Reels and counter
+  if (playing) {
+    const dir = mode === 'rew' ? -1 : 1;
+    reelAngle += dt * 220 * rate * dir;
+    counter = (counter + dt * 3.2 * rate * dir + 1000) % 1000;
+  }
+  const prog = counter / 1000;
+  reels[0].style.setProperty('--pack', (1 - prog).toFixed(3));
+  reels[1].style.setProperty('--pack', prog.toFixed(3));
+  hubs.forEach((h) => h.style.setProperty('--spin', `${reelAngle.toFixed(1)}deg`));
+  const count = Math.floor(counter);
+  if (count !== lastCount) {
+    lastCount = count;
+    const s = String(count).padStart(3, '0');
+    digits.forEach((d, i) => d.style.setProperty('--d', s[i]));
   }
 
-  function snap() {
-    snapped = { t0: performance.now(), x: (input.value / 100) * rope.clientWidth, y: y0 + sag };
-    input.disabled = true;
-    detach(handle, stage, {
-      round: true,
-      vx: rand(-100, 100),
-      vy: vel * 40,
-      onRestore: (b) => rope.insertBefore(b.el, input),
+  // Spectrum on the display, needle on the VU meter
+  let level = 0;
+  if (ctx) {
+    analyser.getByteFrequencyData(freqData);
+    bars.forEach((b, i) => {
+      const lo = Math.floor(Math.pow(2, i * 0.45));
+      const hi = Math.max(lo + 1, Math.floor(Math.pow(2, (i + 1) * 0.45)));
+      let sum = 0;
+      for (let k = lo; k < hi; k++) sum += freqData[k];
+      b.style.height = `${Math.max(8, (sum / (hi - lo) / 255) * 100).toFixed(0)}%`;
     });
+    analyser.getFloatTimeDomainData(timeData);
+    let rms = 0;
+    for (let k = 0; k < timeData.length; k++) rms += timeData[k] * timeData[k];
+    level = Math.sqrt(rms / timeData.length);
   }
+  const db = 20 * Math.log10(level + 1e-5);
+  const target = -48 + clamp((db + 40) / 40, 0, 1.1) * 96;
+  // Needle ballistics: quick up, slower down
+  vuAngle += (target - vuAngle) * (target > vuAngle ? 0.35 : 0.08);
+  vu.style.setProperty('--a', `${vuAngle.toFixed(1)}deg`);
 
-  input.addEventListener('input', () => {
-    const v = Number(input.value);
-    energy += Math.abs(v - last);
-    last = v;
-    out.textContent = `${v} kg`;
-    if (!snapped && energy > 240) snap();
-  });
-
-  stage.__afterRepair = () => {
-    if (!snapped) return;
-    snapped = null;
-    input.disabled = false;
-    energy = 0;
-    vel = 0;
-  };
+  let info;
+  if (flash && now < flash.until) info = flash.text;
+  else if (stopping) info = '■ STOP';
+  else if (!playing) info = 'PRESS PLAY ▶';
+  else if (clarity < 0.35) info = '~ STATIC ~';
+  else {
+    const label = tapeLabel.value.trim();
+    const title = label ? `“${label}”` : station.name;
+    const cue = mode === 'ff' ? ' ▶▶' : mode === 'rew' ? ' ◀◀' : '';
+    info = `${recArmed ? '● ' : ''}${title} · ${station.bpm}${cue}`;
+  }
+  if (info !== lastInfo) {
+    lastInfo = info;
+    lcdInfo.textContent = info;
+    lcdInfo.classList.toggle('blink', !playing && !stopping && !(flash && now < flash.until));
+  }
 
   requestAnimationFrame(frame);
-})();
-
-/* ---------- 06 Checkbox: the mark keeps going ---------- */
-(() => {
-  const stage = document.querySelector('[data-stage="checkbox"]');
-  const input = stage.querySelector('[data-vine-input]');
-  const svg = stage.querySelector('[data-vine-svg]');
-  const lines = [stage.querySelector('[data-vine-path]'), stage.querySelector('[data-vine-shadow]')];
-  let anims = [];
-
-  function vine() {
-    const W = stage.clientWidth, H = stage.clientHeight;
-    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const x = input.offsetLeft + input.parentNode.offsetLeft;
-    const y = input.offsetTop + input.parentNode.offsetTop;
-    const s = input.offsetWidth;
-    const pts = [[x + s * 0.2, y + s * 0.52], [x + s * 0.42, y + s * 0.74], [x + s * 0.8, y + s * 0.24]];
-    let ang = -0.9;
-    let p = pts[2];
-    for (let i = 0; i < 11; i++) {
-      ang += rand(-1.1, 1.1);
-      const len = rand(60, 130);
-      let nx = p[0] + Math.cos(ang) * len;
-      let ny = p[1] + Math.sin(ang) * len;
-      if (nx < 24 || nx > W - 24) { ang = Math.PI - ang; nx = Math.min(W - 24, Math.max(24, nx)); }
-      if (ny < 24 || ny > H - 24) { ang = -ang; ny = Math.min(H - 24, Math.max(24, ny)); }
-      p = [nx, ny];
-      pts.push(p);
-    }
-    // The tick itself is two straight strokes, then a Catmull-Rom curve carries on from its tip
-    let d = `M${pts[0][0]} ${pts[0][1]} L${pts[1][0]} ${pts[1][1]} L${pts[2][0]} ${pts[2][1]}`;
-    for (let i = 2; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
-      d += ` C${p1[0] + (p2[0] - p0[0]) / 6} ${p1[1] + (p2[1] - p0[1]) / 6} ${p2[0] - (p3[0] - p1[0]) / 6} ${p2[1] - (p3[1] - p1[1]) / 6} ${p2[0]} ${p2[1]}`;
-    }
-    return d;
-  }
-
-  function animate(from, to, duration, easing) {
-    anims.forEach((a) => a.cancel());
-    anims = lines.map((l) => l.animate(
-      [{ strokeDashoffset: from }, { strokeDashoffset: to }],
-      { duration: reduced ? 0 : duration, easing, fill: 'forwards' },
-    ));
-  }
-
-  input.addEventListener('change', () => {
-    if (input.checked) {
-      const d = vine();
-      lines.forEach((l) => l.setAttribute('d', d));
-      const L = lines[0].getTotalLength();
-      lines.forEach((l) => { l.style.strokeDasharray = `${L}`; });
-      animate(L, 0, 3600, 'cubic-bezier(.25,.7,.3,1)');
-      markDirty(stage);
-    } else {
-      const L = lines[0].getTotalLength();
-      animate(0, L, 700, 'ease-in');
-      markDirty(stage, false);
-    }
-  });
-
-  stage.__afterRepair = () => {
-    if (!input.checked) return;
-    input.checked = false;
-    input.dispatchEvent(new Event('change'));
-  };
-})();
+}
+requestAnimationFrame(frame);
+updateKeys();

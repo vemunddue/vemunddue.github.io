@@ -1,6 +1,6 @@
 # vemunddue.com
 
-Interface studies: ordinary components under slightly wrong conditions. Plain HTML, CSS and JS, no build step.
+Interface studies vol. 1: a boombox built entirely from UI components, with live Web Audio beats. Plain HTML, CSS and JS, no build step.
 
 ## Run locally
 

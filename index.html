@@ -3,202 +3,222 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vemund Due Thorén · Interface studies</title>
-  <meta name="description" content="Ordinary interface components under slightly wrong conditions. Interface studies by Vemund Due Thorén.">
-  <meta property="og:title" content="Interface studies · Vemund Due Thorén">
-  <meta property="og:description" content="Ordinary components, slightly wrong conditions.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='6' y='12' width='22' height='12' rx='3' fill='%231a25a8' transform='rotate(-12 16 16)'/><rect x='5' y='8' width='22' height='12' rx='3' fill='%232b3cff' transform='rotate(-12 16 16)'/></svg>">
+  <title>Vemund Due · Interface studies vol. 1</title>
+  <meta name="description" content="A boombox built entirely from UI components. Interface studies by Vemund Due Thorén.">
+  <meta property="og:title" content="Vemund Due · Interface studies vol. 1">
+  <meta property="og:description" content="A boombox built entirely from UI components. Sound on, press play.">
+  <meta name="theme-color" content="#07080d">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='8' width='28' height='18' rx='3' fill='%23c3c8d1'/><circle cx='9' cy='17' r='5' fill='%231a1c22'/><circle cx='23' cy='17' r='5' fill='%231a1c22'/><rect x='13' y='12' width='6' height='4' fill='%232b3cff'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..900;1,62..125,400..900&family=JetBrains+Mono:wght@400;700&family=Permanent+Marker&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar wrap">
-    <a href="/" class="name">Vemund Due Thorén</a>
+  <header class="topbar">
+    <a href="/" class="site">vemunddue.com</a>
     <nav>
-      <a href="#notes">Notes</a>
+      <a href="#liner">Liner notes</a>
       <a href="https://github.com/vemunddue" rel="me">GitHub</a>
     </nav>
   </header>
 
-  <main class="wrap">
-    <section class="intro">
-      <p class="eyebrow">Interface studies · 2026</p>
-      <h1 data-extrude>Ordinary components, slightly wrong conditions.</h1>
-      <p>Six standard interface elements under a small change in physics. They keep their function, their labels and their keyboard support. Not all of them keep their shape.</p>
-      <p class="byline">By Vemund Due Thorén, product &amp; UX design.</p>
-    </section>
+  <section class="hero">
+    <h1 class="chrome" data-chrome>
+      <span>Vemund</span> <span>Due</span>
+      <i class="glint" style="left: 12%; top: 8%"></i>
+      <i class="glint glint-late" style="left: 88%; top: 52%"></i>
+    </h1>
+    <p class="sub">Interface studies, vol. 1. A boombox built entirely from UI components. <strong>Sound on, press play, turn the knobs.</strong></p>
+  </section>
 
-    <section class="exhibits">
-      <!-- 01 Select -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage" data-stage="select">
-            <div class="chain-select" data-select>
-              <button class="select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="chain-list" data-select-trigger>
-                <span data-select-value>Choose a city</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5l4 3.5 4-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-              </button>
-              <ul class="chain" id="chain-list" role="listbox" aria-label="City" data-chain>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Stockholm"><span class="opt-label">Stockholm</span></li>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Oslo"><span class="opt-label">Oslo</span></li>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Copenhagen"><span class="opt-label">Copenhagen</span></li>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Helsinki"><span class="opt-label">Helsinki</span></li>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Reykjavík"><span class="opt-label">Reykjavík</span></li>
-                <li class="chain-option" role="option" tabindex="-1" aria-selected="false" aria-label="Tallinn"><span class="opt-label">Tallinn</span></li>
-              </ul>
+  <section class="stage" data-stage aria-label="Boombox">
+    <div class="scene" data-scene>
+      <div class="boombox" data-boombox>
+        <div class="bb-handle" aria-hidden="true">
+          <span class="post post-l"></span><span class="post post-r"></span>
+          <span class="bar"><span class="grip"></span></span>
+        </div>
+        <div class="bb-face bb-back" aria-hidden="true"></div>
+        <div class="bb-face bb-top" aria-hidden="true"></div>
+        <div class="bb-face bb-bottom" aria-hidden="true"></div>
+        <div class="bb-face bb-left" aria-hidden="true"></div>
+        <div class="bb-face bb-right" aria-hidden="true"></div>
+
+        <div class="bb-face bb-front">
+          <!-- Top: vent, tuner, display -->
+          <div class="row-top">
+            <div class="vent" aria-hidden="true">
+              <span class="slats"></span>
+              <span class="hifi">High fidelity</span>
+              <span class="slats"></span>
             </div>
-          </div>
-        </div>
-        <div class="placard">
-          <span class="no">01</span>
-          <div>
-            <h2>Select</h2>
-            <p>Hangs from its trigger like a bungee cord. Follows you, slightly late.</p>
-          </div>
-          <span class="material">Listbox, six springs</span>
-        </div>
-      </article>
 
-      <!-- 02 Button -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage" data-stage="button">
-            <button class="solid" type="button" data-shatter>Confirm</button>
-          </div>
-          <button class="reset" type="button" aria-label="Reset button" data-reset>↺ Reset</button>
-        </div>
-        <div class="placard">
-          <span class="no">02</span>
-          <div>
-            <h2>Button</h2>
-            <p>A primary action with real depth. Pressing it is final.</p>
-          </div>
-          <span class="material">Button, four fractures</span>
-        </div>
-      </article>
-
-      <!-- 03 Switch -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage" data-stage="switch">
-            <div class="switch-row">
-              <button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="switch-label" data-switch><span class="switch-knob" data-knob></span></button>
-              <span id="switch-label">Notifications</span>
-            </div>
-          </div>
-          <button class="reset" type="button" aria-label="Reset switch" data-reset>↺ Reset</button>
-        </div>
-        <div class="placard">
-          <span class="no">03</span>
-          <div>
-            <h2>Switch</h2>
-            <p>Turning it on requires slightly more travel than the track provides.</p>
-          </div>
-          <span class="material">Switch, sphere</span>
-        </div>
-      </article>
-
-      <!-- 04 Text field -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage stage-drag" data-stage="field">
-            <div class="field3d" data-field3d>
-              <div class="box" data-box>
-                <div class="face front"><input id="field3d-input" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Write something" data-field-input></div>
-                <div class="face back" aria-hidden="true"><span data-back-text>Write something</span></div>
-                <div class="face top"><label for="field3d-input">Name</label></div>
-                <div class="face bottom" aria-hidden="true"></div>
-                <div class="face left" aria-hidden="true"></div>
-                <div class="face right" aria-hidden="true"></div>
+            <div class="panel tuner-panel">
+              <div class="tuner" data-tuner>
+                <div class="tuner-scale" aria-hidden="true">
+                  <span class="band band-fm">FM</span>
+                  <span class="band band-am">AM</span>
+                  <span class="mark fm" style="--p: 0">88</span><span class="mark fm" style="--p: .2">92</span><span class="mark fm" style="--p: .4">96</span>
+                  <span class="mark fm" style="--p: .6">100</span><span class="mark fm" style="--p: .8">104</span><span class="mark fm" style="--p: 1">108</span>
+                  <span class="mark am" style="--p: 0">53</span><span class="mark am" style="--p: .2">60</span><span class="mark am" style="--p: .4">70</span>
+                  <span class="mark am" style="--p: .6">90</span><span class="mark am" style="--p: .8">120</span><span class="mark am" style="--p: 1">160</span>
+                  <i class="station-dot" style="--p: .12"></i><i class="station-dot" style="--p: .44"></i>
+                  <i class="station-dot" style="--p: .675"></i><i class="station-dot" style="--p: .875"></i>
+                </div>
+                <span class="tuner-needle" aria-hidden="true"></span>
+                <input type="range" min="880" max="1080" step="1" value="904" aria-label="Tuning dial, FM frequency" aria-valuetext="90.4 megahertz" data-tuning>
               </div>
-              <div class="box-shadow" aria-hidden="true"></div>
-            </div>
-            <p class="stage-hint">Drag to turn</p>
-          </div>
-          <button class="reset" type="button" aria-label="Reset text field" data-reset>↺ Reset</button>
-        </div>
-        <div class="placard">
-          <span class="no">04</span>
-          <div>
-            <h2>Text field</h2>
-            <p>Accepts input. Can be examined from every side.</p>
-          </div>
-          <span class="material">Input, six faces</span>
-        </div>
-      </article>
-
-      <!-- 05 Slider -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage" data-stage="slider">
-            <div class="rope-wrap">
-              <div class="rope" data-rope>
-                <svg aria-hidden="true">
-                  <g class="rope-shadow"><path data-rope-sa /><path data-rope-sb /></g>
-                  <path data-rope-a />
-                  <path data-rope-b />
-                </svg>
-                <span class="rope-handle" data-rope-handle></span>
-                <input type="range" min="0" max="100" value="30" aria-label="Load" data-rope-input>
+              <div class="ctl">
+                <div class="knob knob-big" role="slider" tabindex="0" aria-label="Tuning" data-knob="tune"><span class="knob-ind"></span></div>
+                <span class="ctl-label">Tuning</span>
               </div>
-              <p class="rope-meta">Load <output data-rope-out>30 kg</output></p>
+            </div>
+
+            <div class="lcd" aria-hidden="true">
+              <div class="lcd-top">
+                <span class="lcd-freq" data-lcd-freq>FM 90.4</span>
+                <span class="lamp" data-lamp>ST</span>
+              </div>
+              <div class="eq-display" data-spectrum></div>
+              <div class="lcd-info" data-lcd-info>PRESS PLAY</div>
             </div>
           </div>
-          <button class="reset" type="button" aria-label="Reset slider" data-reset>↺ Reset</button>
+
+          <!-- Middle: speaker, centre console, speaker -->
+          <div class="row-mid">
+            <div class="speaker-box">
+              <i class="bracket tl"></i><i class="bracket tr"></i><i class="bracket bl"></i><i class="bracket br"></i>
+              <div class="speaker" data-speaker="kick">
+                <div class="grille" data-grille></div>
+                <button class="cone" type="button" aria-label="Woofer, left. Plays a kick drum." data-cone="kick"></button>
+                <span class="crossbar" aria-hidden="true"><span>Bass reflex</span></span>
+              </div>
+            </div>
+
+            <div class="console">
+              <div class="panel knobs" role="group" aria-label="Sound">
+                <div class="ctl"><div class="knob" role="slider" tabindex="0" aria-label="Filter" data-knob="filter"><span class="knob-ind"></span></div><span class="ctl-label">Filter</span></div>
+                <div class="ctl"><div class="knob" role="slider" tabindex="0" aria-label="Echo" data-knob="echo"><span class="knob-ind"></span></div><span class="ctl-label">Echo</span></div>
+                <div class="ctl"><div class="knob" role="slider" tabindex="0" aria-label="Reverb" data-knob="reverb"><span class="knob-ind"></span></div><span class="ctl-label">Reverb</span></div>
+                <div class="ctl"><div class="knob" role="slider" tabindex="0" aria-label="Drive" data-knob="drive"><span class="knob-ind"></span></div><span class="ctl-label">Drive</span></div>
+                <div class="ctl"><div class="knob knob-vol" role="slider" tabindex="0" aria-label="Volume" data-knob="volume"><span class="knob-ind"></span></div><span class="ctl-label">Volume</span></div>
+              </div>
+
+              <div class="panel eq-panel">
+                <div class="geq" role="group" aria-label="10 band graphic equalizer" data-geq></div>
+                <div class="vu" aria-hidden="true">
+                  <svg viewBox="0 0 100 60">
+                    <path d="M12 46 A44 44 0 0 1 88 46" class="vu-arc"/>
+                    <path d="M70 21 A44 44 0 0 1 88 46" class="vu-red"/>
+                    <text x="50" y="56">VU</text>
+                  </svg>
+                  <span class="vu-needle" data-vu></span>
+                </div>
+              </div>
+
+              <div class="logo-row">
+                <span class="badge">VDT-86</span>
+                <div class="counter-wrap">
+                  <div class="counter" aria-hidden="true" data-counter>
+                    <span class="digit"><span class="strip">0123456789</span></span>
+                    <span class="digit"><span class="strip">0123456789</span></span>
+                    <span class="digit"><span class="strip">0123456789</span></span>
+                  </div>
+                  <button class="counter-reset" type="button" aria-label="Reset tape counter" data-counter-reset></button>
+                </div>
+                <div class="bass-wrap">
+                  <span class="ctl-label" id="bass-label">Bass boost</span>
+                  <button class="bass-switch" type="button" role="switch" aria-checked="false" aria-labelledby="bass-label" data-bass></button>
+                </div>
+              </div>
+
+              <div class="door" data-door>
+                <span class="door-text" aria-hidden="true">Auto reverse</span>
+                <div class="cassette">
+                  <div class="cassette-label">
+                    <span class="side">A</span>
+                    <input type="text" maxlength="20" spellcheck="false" autocomplete="off" placeholder="Mixtape vol. 1" aria-label="Tape label" data-tape-label>
+                    <span class="c90">C-90</span>
+                  </div>
+                  <div class="cassette-window">
+                    <span class="tape-run"></span>
+                    <span class="reel reel-l" data-reel><span class="pack"></span><span class="hub"></span></span>
+                    <span class="reel reel-r" data-reel><span class="pack"></span><span class="hub"></span></span>
+                  </div>
+                  <span class="cassette-foot"></span>
+                </div>
+              </div>
+
+              <div class="keys" role="group" aria-label="Tape transport">
+                <button class="key key-rec" type="button" aria-pressed="false" aria-label="Record" data-key="rec"><span class="rec-dot"></span><small>Rec</small></button>
+                <button class="key" type="button" aria-pressed="false" aria-label="Rewind" data-key="rew">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6 3 12l8 6zM21 6l-8 6 8 6z"/></svg><small>Rew</small>
+                </button>
+                <button class="key key-play" type="button" aria-pressed="false" aria-label="Play" data-key="play">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><small>Play</small>
+                </button>
+                <button class="key" type="button" aria-pressed="false" aria-label="Fast forward" data-key="ff">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6l8 6-8 6zM13 6l8 6-8 6z"/></svg><small>FF</small>
+                </button>
+                <button class="key" type="button" aria-label="Stop, press again to eject" data-key="stop">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg><small>Stop/Ej</small>
+                </button>
+              </div>
+            </div>
+
+            <div class="speaker-box">
+              <i class="bracket tl"></i><i class="bracket tr"></i><i class="bracket bl"></i><i class="bracket br"></i>
+              <div class="speaker" data-speaker="snare">
+                <div class="grille" data-grille></div>
+                <button class="cone" type="button" aria-label="Woofer, right. Plays a snare." data-cone="snare"></button>
+                <span class="crossbar" aria-hidden="true"><span>Bass reflex</span></span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="placard">
-          <span class="no">05</span>
+      </div>
+      <div class="floor-shadow" aria-hidden="true"></div>
+    </div>
+    <p class="sr-only" aria-live="polite" data-status></p>
+  </section>
+
+  <section class="liner" id="liner">
+    <div class="jcard">
+      <div class="jcard-spine" aria-hidden="true"><span>VDT · Interface studies · Vol. 1</span></div>
+      <div class="jcard-body">
+        <h2 class="chrome chrome-sm">Liner notes</h2>
+        <p class="jcard-intro">Every part of the machine is an ordinary, labelled interface element. The sound is synthesised live in your browser. Double-click any knob to put it back.</p>
+        <div class="sides">
           <div>
-            <h2>Slider</h2>
-            <p>The track carries the weight of the handle. Sudden movements are not recommended.</p>
+            <h3>Side A</h3>
+            <ol>
+              <li><b>Speaker grilles</b> A few hundred checkboxes, lit by the beat.</li>
+              <li><b>Woofers</b> Two buttons. Hit them. Kick left, snare right.</li>
+              <li><b>Tuner</b> A range input and a knob, 88 to 108. Four stations, static in between.</li>
+              <li><b>Filter, echo, reverb, drive</b> Sliders you turn. Drag up and down, or use the arrow keys.</li>
+              <li><b>Equalizer</b> Ten range inputs standing on end.</li>
+            </ol>
           </div>
-          <span class="material">Range, tension</span>
-        </div>
-      </article>
-
-      <!-- 06 Checkbox -->
-      <article class="exhibit">
-        <div class="frame">
-          <div class="stage" data-stage="checkbox">
-            <label class="vine-check">
-              <input type="checkbox" data-vine-input>
-              <span>Keep me signed in</span>
-            </label>
-            <svg class="vine-svg" aria-hidden="true" data-vine-svg>
-              <path class="vine-shadow" data-vine-shadow />
-              <path class="vine-line" data-vine-path />
-            </svg>
-          </div>
-          <button class="reset" type="button" aria-label="Reset checkbox" data-reset>↺ Reset</button>
-        </div>
-        <div class="placard">
-          <span class="no">06</span>
           <div>
-            <h2>Checkbox</h2>
-            <p>The mark does not know where to stop.</p>
+            <h3>Side B</h3>
+            <ol>
+              <li><b>Transport</b> Five buttons that latch, like they used to. Stop twice to eject.</li>
+              <li><b>Record</b> Arm it, press play, then hit the woofers to record onto the loop.</li>
+              <li><b>Tape label</b> A text field. Name your mixtape.</li>
+              <li><b>Bass boost</b> A switch. The modern kind.</li>
+              <li><b>VU meter</b> The only part that just watches.</li>
+            </ol>
           </div>
-          <span class="material">Checkbox, one continuous line</span>
         </div>
-      </article>
-    </section>
+      </div>
+    </div>
+  </section>
 
-    <section class="notes" id="notes">
-      <h2>Notes</h2>
-      <ol>
-        <li><strong>Everything is reversible.</strong> When something breaks, a reset appears next to it and puts every piece back where it came from.</li>
-        <li><strong>Semantics stay intact.</strong> Assistive technology meets an ordinary listbox, switch, field and checkbox, whatever the pixels are doing.</li>
-        <li><strong>The 3D is real DOM.</strong> No canvas, no WebGL. The text field you turn around is a real input, with focus, selection and a label.</li>
-        <li><strong>Reduced motion is respected.</strong> Things still break. They just don't perform it.</li>
-      </ol>
-    </section>
-
-    <footer class="footer">
-      <span>Vemund Due Thorén</span>
-      <span>HTML, CSS 3D transforms and a small physics loop. No libraries.</span>
-    </footer>
-  </main>
+  <footer class="footer">
+    <span>Vemund Due Thorén · Product &amp; UX design</span>
+    <span>HTML, CSS 3D and the Web Audio API. No libraries, no samples.</span>
+  </footer>
 
   <script src="main.js"></script>
 </body>
