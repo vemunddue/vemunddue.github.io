@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vemund Due Thorén · Components with feelings</title>
+  <meta name="description" content="A design system having a bad day. Accessible, documented components with strong opinions, by Vemund Due Thorén.">
+  <meta property="og:title" content="A design system having a bad day">
+  <meta property="og:description" content="Accessible, documented components with strong opinions. By Vemund Due Thorén.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>😬</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">vemunddue<span>.com</span></a>
+    <span class="version">v0.9.99-overdue</span>
+    <nav class="top-links">
+      <a href="#changelog">Changelog</a>
+      <a href="https://github.com/vemunddue" rel="me">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Components">
+      <p class="sidebar-label">Components</p>
+      <ul>
+        <li><a href="#shy-button">ShyButton</a></li>
+        <li><a href="#reluctant-toggle">ReluctantToggle</a></li>
+        <li><a href="#clingy-checkbox">ClingyCheckbox</a></li>
+        <li><a href="#hasty-slider">HastySlider</a></li>
+        <li><a href="#moody-select">MoodySelect</a></li>
+        <li><a href="#judgmental-password">JudgmentalPassword</a></li>
+        <li><a href="#overdue-progress">OverdueProgress</a></li>
+      </ul>
+      <p class="sidebar-label">Meta</p>
+      <ul>
+        <li><a href="#changelog">Changelog</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <section class="intro">
+        <p class="eyebrow">Design system · Emotionally unstable</p>
+        <h1>A design system<br>having a bad day.</h1>
+        <p class="lede">Every component here is accessible, documented and keyboard friendly. They just have feelings about it.</p>
+        <p class="byline">By <strong>Vemund Due Thorén</strong>, who builds components that behave for a living. These ones are off the clock.</p>
+      </section>
+
+      <!-- ShyButton -->
+      <section class="component" id="shy-button">
+        <div class="component-head">
+          <h2>ShyButton</h2>
+          <span class="status">Socially anxious</span>
+        </div>
+        <p class="component-desc">A primary button that does not enjoy attention. Dodges the cursor until it runs out of courage.</p>
+        <div class="demo">
+          <div class="stage stage-shy" data-shy-stage>
+            <button class="btn btn-primary shy-btn" type="button" data-shy-btn>Click me</button>
+          </div>
+          <p class="demo-caption" data-shy-caption aria-live="polite">Go ahead. Try.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>shyness</code></td><td><code>number</code></td><td><code>6</code></td><td>Dodges before it gives up.</td></tr>
+              <tr><td><code>onClick</code></td><td><code>() =&gt; void</code></td><td>–</td><td>Fires. Eventually.</td></tr>
+              <tr><td><code>trustsKeyboard</code></td><td><code>boolean</code></td><td><code>true</code></td><td>Keyboard users are never dodged. Accessibility is not a joke.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ReluctantToggle -->
+      <section class="component" id="reluctant-toggle">
+        <div class="component-head">
+          <h2>ReluctantToggle</h2>
+          <span class="status">Needs convincing</span>
+        </div>
+        <p class="component-desc">A switch that has opinions about being turned on. Turning it off is never a problem.</p>
+        <div class="demo">
+          <div class="stage">
+            <div class="toggle-row">
+              <button class="toggle" type="button" role="switch" aria-checked="false" aria-labelledby="toggle-label" data-toggle><span class="toggle-knob"></span></button>
+              <span id="toggle-label">Productivity mode</span>
+            </div>
+          </div>
+          <p class="demo-caption" data-toggle-caption aria-live="polite">Off. As it should be.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>reluctance</code></td><td><code>number</code></td><td><code>4</code></td><td>Clicks needed to turn it on.</td></tr>
+              <tr><td><code>excuses</code></td><td><code>string[]</code></td><td>built-in</td><td>What it says instead of doing its job.</td></tr>
+              <tr><td><code>offDelay</code></td><td><code>number</code></td><td><code>0</code></td><td>No hesitation whatsoever.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ClingyCheckbox -->
+      <section class="component" id="clingy-checkbox">
+        <div class="component-head">
+          <h2>ClingyCheckbox</h2>
+          <span class="status">Attached</span>
+        </div>
+        <p class="component-desc">Easy to check. Emotionally difficult to uncheck.</p>
+        <div class="demo">
+          <div class="stage">
+            <label class="check" data-clingy-label>
+              <input type="checkbox" data-clingy>
+              <span>Subscribe to my feelings</span>
+            </label>
+          </div>
+          <p class="demo-caption" data-clingy-caption aria-live="polite">No pressure.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>attachment</code></td><td><code>number</code></td><td><code>3</code></td><td>Pleas before it lets go.</td></tr>
+              <tr><td><code>defaultChecked</code></td><td><code>boolean</code></td><td><code>false</code></td><td>It's fine. It's not mad.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- HastySlider -->
+      <section class="component" id="hasty-slider">
+        <div class="component-head">
+          <h2>HastySlider</h2>
+          <span class="status">Over-eager</span>
+        </div>
+        <p class="component-desc">Respects your input. Right after it's done going all the way.</p>
+        <div class="demo">
+          <div class="stage">
+            <div class="slider-row">
+              <label for="hasty">Volume</label>
+              <input type="range" id="hasty" min="0" max="100" value="20" data-hasty>
+              <output for="hasty" data-hasty-out>20%</output>
+            </div>
+          </div>
+          <p class="demo-caption" data-hasty-caption aria-live="polite">Set it to something reasonable.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>patience</code></td><td><code>number</code></td><td><code>0</code></td><td>Milliseconds before it goes to max.</td></tr>
+              <tr><td><code>overshoot</code></td><td><code>'max'</code></td><td><code>'max'</code></td><td>The only supported value.</td></tr>
+              <tr><td><code>apologizes</code></td><td><code>boolean</code></td><td><code>true</code></td><td>It knows what it did.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- MoodySelect -->
+      <section class="component" id="moody-select">
+        <div class="component-head">
+          <h2>MoodySelect</h2>
+          <span class="status">Moody</span>
+        </div>
+        <p class="component-desc">A native select whose sort order depends on how it slept. The mood changes after every choice.</p>
+        <div class="demo">
+          <div class="stage">
+            <div class="select-row">
+              <label for="moody">Favorite framework</label>
+              <select id="moody" data-moody></select>
+              <span class="mood-chip" data-mood></span>
+            </div>
+          </div>
+          <p class="demo-caption" data-moody-caption aria-live="polite">Pick one. It will have thoughts.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>mood</code></td><td><code>Mood</code></td><td><code>'random'</code></td><td>Re-rolled after every selection.</td></tr>
+              <tr><td><code>sort</code></td><td><code>(mood) =&gt; Option[]</code></td><td>–</td><td>Depends. Don't ask.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- JudgmentalPassword -->
+      <section class="component" id="judgmental-password">
+        <div class="component-head">
+          <h2>JudgmentalPassword</h2>
+          <span class="status">Judgmental</span>
+        </div>
+        <p class="component-desc">A password field with honest feedback. Nothing leaves your browser. It only judges locally.</p>
+        <div class="demo">
+          <div class="stage">
+            <div class="field">
+              <label for="judge">Password</label>
+              <div class="input-wrap">
+                <input id="judge" type="password" autocomplete="off" spellcheck="false" placeholder="Type something…" data-judge>
+                <button class="btn btn-ghost btn-sm" type="button" aria-pressed="false" data-judge-reveal>Show</button>
+              </div>
+            </div>
+          </div>
+          <p class="demo-caption" data-judge-caption aria-live="polite">Go on. I won't look.</p>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>honesty</code></td><td><code>'brutal'</code></td><td><code>'brutal'</code></td><td>There was a 'gentle' option. It was removed.</td></tr>
+              <tr><td><code>sendsData</code></td><td><code>false</code></td><td><code>false</code></td><td>Never. Not configurable.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- OverdueProgress -->
+      <section class="component" id="overdue-progress">
+        <div class="component-head">
+          <h2>OverdueProgress</h2>
+          <span class="status">Overdue</span>
+        </div>
+        <p class="component-desc">The signature component. Gets to 90% fast and then thinks about it.</p>
+        <div class="demo">
+          <div class="stage stage-column">
+            <div class="progress-block">
+              <div class="progress" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-overdue-bar>
+                <div class="progress-fill" data-overdue-fill></div>
+              </div>
+              <div class="progress-meta">
+                <span data-overdue-msg>Ready when you are.</span>
+                <span class="mono" data-overdue-pct>0%</span>
+              </div>
+            </div>
+            <button class="btn btn-primary" type="button" data-overdue-start>Upload file</button>
+          </div>
+        </div>
+        <div class="props-wrap">
+          <table class="props">
+            <thead><tr><th>Prop</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td><code>eta</code></td><td><code>string</code></td><td><code>'soon'</code></td><td>Always 'soon'.</td></tr>
+              <tr><td><code>max</code></td><td><code>number</code></td><td><code>99.99</code></td><td>100 is a social construct.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="changelog" id="changelog">
+        <h2>Changelog</h2>
+        <ol>
+          <li><span class="mono">v1.0.0</span> Planned for Q3. Overdue.</li>
+          <li><span class="mono">v0.9.99</span> ReluctantToggle needs less convincing (4 clicks, down from 7).</li>
+          <li><span class="mono">v0.9.98</span> ShyButton no longer leaves the viewport. HR got involved.</li>
+          <li><span class="mono">v0.9.97</span> Fixed: ClingyCheckbox sent 412 "miss you" notifications.</li>
+          <li><span class="mono">v0.9.96</span> MoodySelect now changes mood after every selection, as designed.</li>
+        </ol>
+      </section>
+
+      <footer class="footer">
+        <p>Made by Vemund Due Thorén. No components were harmed, though several needed to talk about it.</p>
+      </footer>
+    </main>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>
