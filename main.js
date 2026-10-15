@@ -644,16 +644,15 @@ const tapeLabel = $('[data-tape-label]');
 
 /* ---------- Speakers: woofers are pads, grilles are checkboxes ---------- */
 
-let shake = 0;
 const speakers = $$('[data-speaker]').map((el) => {
   const grille = $('[data-grille]', el);
   const cone = $('[data-cone]', el);
   const dots = [];
-  const c = 146;
-  for (let y = -140; y <= 140; y += 10) {
-    for (let x = -140; x <= 140; x += 10) {
+  const c = 140;
+  for (let y = -135; y <= 135; y += 10) {
+    for (let x = -135; x <= 135; x += 10) {
       const r = Math.hypot(x, y);
-      if (r < 80 || r > 138 || Math.abs(y) < 12) continue;
+      if (r < 78 || r > 132 || Math.abs(y) < 12) continue;
       const dot = document.createElement('input');
       dot.type = 'checkbox';
       dot.className = 'grille-dot';
@@ -673,7 +672,6 @@ function fire(kind, v = 1) {
   if (kind === 'kick') {
     speakers[0].pump = Math.max(speakers[0].pump, v);
     speakers[0].waves.push({ t0: now, s: v });
-    shake = Math.max(shake, v);
   } else if (kind === 'snare') {
     speakers[1].pump = Math.max(speakers[1].pump, v * 0.8);
     speakers[1].waves.push({ t0: now, s: v });
@@ -721,7 +719,8 @@ const scene = $('[data-scene]');
 const chrome = $('[data-chrome]');
 
 function fit() {
-  const scale = Math.min(1, (stageEl.clientWidth - 16) / (W + 170));
+  // Generous margins on both sides; never larger than 90% of its drawn size
+  const scale = Math.min(0.9, (stageEl.clientWidth - 16) / (W + 420));
   scene.style.transform = `scale(${scale})`;
   scene.style.top = `${104 * scale}px`;
   stageEl.style.height = `${(H + 104 + 160) * scale}px`;
@@ -768,10 +767,12 @@ function frame(now) {
     cx += (tx - cx) * 0.05;
     cy += (ty - cy) * 0.05;
   }
-  shake *= Math.exp(-dt * 14);
-  const lift = bass ? 5 : 2.5;
-  boombox.style.transform = `translateY(${(shake * lift).toFixed(2)}px) rotateX(${(-12 - cy * 6).toFixed(2)}deg) rotateY(${(26 + cx * 12).toFixed(2)}deg)`;
-  boombox.style.setProperty('--kx', (-(26 + cx * 12) / 7).toFixed(2));
+  boombox.style.transform = `rotateX(${(-12 - cy * 6).toFixed(2)}deg) rotateY(${(-26 + cx * 12).toFixed(2)}deg)`;
+  // Where "into the box" points on screen, so parts that stick out show their sides the right way
+  const ry = ((-26 + cx * 12) * Math.PI) / 180;
+  const rx = ((-12 - cy * 6) * Math.PI) / 180;
+  boombox.style.setProperty('--dx', (-Math.sin(ry)).toFixed(3));
+  boombox.style.setProperty('--dy', (Math.cos(ry) * Math.sin(rx) * 1.6).toFixed(3));
   chrome.style.setProperty('--shine', `${(40 + cy * 40 + cx * 12).toFixed(1)}%`);
 
   // Fire beat visuals in time with the audio clock
