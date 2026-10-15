@@ -1,11 +1,13 @@
 const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canHover = window.matchMedia('(hover: hover)').matches;
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const lerp = (a, b, t) => a + (b - a) * t;
+const nearest = (angle, step) => Math.round(angle / step) * step;
 
 /* ---------- Physics ----------
-   Loose pieces are moved into their stage and simulated in stage coordinates.
-   Each remembers where it came from, so the glue can put it back. */
+   Loose pieces are moved into their stage and simulated in stage coordinates,
+   tumbling in 3D on the way down. Each remembers where it came from. */
 
 const GRAVITY = 2200;
 const bodies = new Set();
@@ -38,7 +40,7 @@ function heapAdd(stage, x, w, top) {
 }
 
 function render(b) {
-  b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.r}deg)`;
+  b.el.style.transform = `translate(${b.x}px, ${b.y}px) rotate(${b.r}deg) rotateX(${b.rx}deg) rotateY(${b.ry}deg)`;
 }
 
 function step(b, dt) {
@@ -48,6 +50,8 @@ function step(b, dt) {
   b.x += b.vx * dt;
   b.y += b.vy * dt;
   b.r += b.vr * dt;
+  b.rx += b.vrx * dt;
+  b.ry += b.vry * dt;
 
   if (b.x < 0) { b.x = 0; b.vx = Math.abs(b.vx) * 0.5; }
   if (b.x > W - b.w) { b.x = W - b.w; b.vx = -Math.abs(b.vx) * 0.5; }
@@ -60,12 +64,21 @@ function step(b, dt) {
     b.vy = -b.vy * (b.round ? 0.42 : 0.28);
     b.vx *= 0.85;
     b.vr *= 0.6;
+    b.vrx *= 0.5;
+    b.vry *= 0.5;
   } else {
     b.vy = 0;
     b.vx *= b.round ? 0.985 : 0.8;
   }
 
-  const flat = Math.round(b.r / 180) * 180;
+  // Settle flat: face up or face down, never on an edge
+  const flat = nearest(b.r, 180);
+  const flatX = nearest(b.rx, 180);
+  const flatY = nearest(b.ry, 180);
+  b.rx += (flatX - b.rx) * 0.25;
+  b.ry += (flatY - b.ry) * 0.25;
+  b.vrx *= 0.6;
+  b.vry *= 0.6;
   if (b.round) {
     b.vr = (b.vx / (b.w / 2)) * (180 / Math.PI);
   } else {
@@ -73,16 +86,18 @@ function step(b, dt) {
     b.vr *= 0.6;
   }
 
-  const resting = Math.abs(b.vx) < 6 && b.vy === 0 && (b.round || Math.abs(b.r - flat) < 1);
-  if (resting && ++b.still > 8) {
+  const level = (b.round || Math.abs(b.r - flat) < 1) && Math.abs(b.rx - flatX) < 1 && Math.abs(b.ry - flatY) < 1;
+  if (Math.abs(b.vx) < 6 && b.vy === 0 && level && ++b.still > 8) {
     b.settled = true;
     if (!b.round) b.r = flat;
+    b.rx = flatX;
+    b.ry = flatY;
     heapAdd(b.stage, b.x + b.w * 0.15, b.w * 0.7, (H - b.y) * 0.96);
   }
 }
 
 function tick(now) {
-  const dt = Math.min(0.032, (now - lastTick) / 1000);
+  const dt = Math.max(0, Math.min(0.032, (now - lastTick) / 1000));
   lastTick = now;
   let active = false;
   for (const b of bodies) {
@@ -100,13 +115,17 @@ function wake() {
   rafId = requestAnimationFrame(tick);
 }
 
+function markDirty(stage, dirty = true) {
+  stage.parentNode.classList.toggle('dirty', dirty);
+}
+
 function addBody(el, stage, o) {
   el.classList.add('piece');
   const b = {
     el, stage,
-    x: o.x, y: o.y, r: o.rotation || 0,
+    x: o.x, y: o.y, r: o.rotation || 0, rx: 0, ry: 0,
     ox: o.x, oy: o.y, or: o.rotation || 0,
-    vx: o.vx || 0, vy: o.vy || 0, vr: o.vr || 0,
+    vx: o.vx || 0, vy: o.vy || 0, vr: o.vr || 0, vrx: o.vrx || 0, vry: o.vry || 0,
     w: el.offsetWidth, h: el.offsetHeight,
     round: !!o.round,
     onRestore: o.onRestore,
@@ -114,7 +133,7 @@ function addBody(el, stage, o) {
   };
   bodies.add(b);
   render(b);
-  noteBreak();
+  markDirty(stage);
   if (reduced) {
     for (let i = 0; i < 1500 && !b.settled; i++) step(b, 1 / 60);
     render(b);
@@ -142,16 +161,20 @@ function detach(el, stage, opts = {}) {
 
 function tweenHome(b, done) {
   b.tween = true;
-  const sx = b.x, sy = b.y, sr = b.r;
-  const tr = b.or + Math.round((sr - b.or) / 360) * 360;
-  const dur = reduced ? 0 : rand(650, 850);
+  const sx = b.x, sy = b.y, sr = b.r, srx = b.rx, sry = b.ry;
+  const tr = b.or + nearest(sr - b.or, 360);
+  const trx = nearest(srx, 360);
+  const tryy = nearest(sry, 360);
+  const dur = reduced ? 0 : rand(700, 900);
   const t0 = performance.now();
   const frame = (now) => {
     const t = dur ? Math.min(1, (now - t0) / dur) : 1;
     const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
     b.x = lerp(sx, b.ox, e);
-    b.y = lerp(sy, b.oy, e) - Math.sin(Math.PI * t) * 60;
+    b.y = lerp(sy, b.oy, e) - Math.sin(Math.PI * t) * 70;
     b.r = lerp(sr, tr, e);
+    b.rx = lerp(srx, trx, e);
+    b.ry = lerp(sry, tryy, e);
     render(b);
     if (t < 1) requestAnimationFrame(frame);
     else done();
@@ -165,7 +188,7 @@ function repair(stage) {
   const finish = () => {
     heapFor(stage).fill(0);
     stage.__afterRepair?.();
-    if (!bodies.size) glue.classList.remove('needed');
+    markDirty(stage, false);
   };
   if (!list.length) { finish(); return; }
   let pending = list.length;
@@ -180,135 +203,148 @@ function repair(stage) {
   }
 }
 
-/* ---------- Glue ---------- */
-
-const glue = document.querySelector('[data-glue]');
-const hint = document.querySelector('[data-glue-hint]');
-let armed = false;
-let hinted = false;
-let glueUsed = false;
-
-function noteBreak() {
-  glue.classList.remove('needed');
-  void glue.offsetWidth;
-  glue.classList.add('needed');
-  if (!hinted && !glueUsed) {
-    hinted = true;
-    setTimeout(() => hint.classList.add('show'), 600);
-  }
-}
-
-function arm(on) {
-  armed = on;
-  document.body.classList.toggle('glue-armed', on);
-  glue.setAttribute('aria-pressed', String(on));
-  if (on) {
-    glueUsed = true;
-    hint.classList.remove('show');
-  }
-}
-
-function dropGlue(x, y) {
-  const d = document.createElement('div');
-  d.className = 'glue-drop';
-  d.style.left = `${x}px`;
-  d.style.top = `${y}px`;
-  document.body.appendChild(d);
-  setTimeout(() => d.remove(), 1700);
-}
-
-glue.addEventListener('click', (e) => {
-  // From the keyboard there is nothing to aim with, so it repairs everything
-  if (e.detail === 0) {
-    glueUsed = true;
-    hint.classList.remove('show');
-    document.querySelectorAll('[data-stage]').forEach(repair);
-    return;
-  }
-  arm(!armed);
+document.querySelectorAll('[data-reset]').forEach((btn) => {
+  btn.addEventListener('click', () => repair(btn.parentNode.querySelector('[data-stage]')));
 });
 
-document.addEventListener('mousedown', (e) => {
-  if (armed && !glue.contains(e.target)) e.preventDefault();
-}, true);
+/* ---------- Hero: extruded headline that turns toward the pointer ---------- */
+(() => {
+  const h1 = document.querySelector('[data-extrude]');
+  if (!h1 || reduced) return;
+  let tx = 0.15, ty = -0.2, cx = tx, cy = ty;
+  let lastMove = 0;
+  const layers = 11;
 
-document.addEventListener('click', (e) => {
-  if (!armed || glue.contains(e.target)) return;
-  e.preventDefault();
-  e.stopPropagation();
-  dropGlue(e.clientX, e.clientY);
-  const stage = e.target.closest('[data-stage]');
-  if (stage) repair(stage);
-  arm(false);
-}, true);
+  window.addEventListener('pointermove', (e) => {
+    tx = e.clientX / window.innerWidth - 0.5;
+    ty = e.clientY / window.innerHeight - 0.5;
+    lastMove = performance.now();
+  });
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && armed) arm(false);
-});
+  function frame(now) {
+    // Without a pointer it drifts slowly on its own
+    if (!canHover || now - lastMove > 4000) {
+      tx = Math.sin(now / 2600) * 0.35;
+      ty = Math.cos(now / 3400) * 0.25 - 0.1;
+    }
+    cx += (tx - cx) * 0.06;
+    cy += (ty - cy) * 0.06;
+    const dx = -cx * 1.1;
+    const dy = -cy * 1.1 + 0.55;
+    const shadow = [];
+    for (let i = 1; i <= layers; i++) {
+      const color = i <= layers * 0.35 ? 'var(--accent)' : 'var(--accent-deep)';
+      shadow.push(`${(dx * i).toFixed(2)}px ${(dy * i).toFixed(2)}px 0 ${color}`);
+    }
+    shadow.push(`${(dx * layers * 1.6).toFixed(1)}px ${(dy * layers * 1.6 + 14).toFixed(1)}px 34px rgb(0 0 0 / 0.2)`);
+    h1.style.textShadow = shadow.join(', ');
+    h1.style.transform = `perspective(1400px) rotateX(${(-cy * 12).toFixed(2)}deg) rotateY(${(cx * 16).toFixed(2)}deg)`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
 
-/* ---------- 01 Select: opens along an arc, labels fall out ---------- */
+/* ---------- Stages tilt toward the pointer ---------- */
+(() => {
+  if (reduced || !canHover) return;
+  const frames = [...document.querySelectorAll('.frame')].map((f) => ({
+    f, stage: f.querySelector('[data-stage]'), tx: 0, ty: 0, cx: 0, cy: 0,
+  }));
+  frames.forEach((s) => {
+    s.f.addEventListener('pointermove', (e) => {
+      const r = s.f.getBoundingClientRect();
+      s.tx = (e.clientX - r.left) / r.width - 0.5;
+      s.ty = (e.clientY - r.top) / r.height - 0.5;
+    });
+    s.f.addEventListener('pointerleave', () => { s.tx = 0; s.ty = 0; });
+  });
+  function frame() {
+    for (const s of frames) {
+      s.cx += (s.tx - s.cx) * 0.07;
+      s.cy += (s.ty - s.cy) * 0.07;
+      s.stage.style.transform = `rotateX(${(-s.cy * 6).toFixed(2)}deg) rotateY(${(s.cx * 8).toFixed(2)}deg)`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* ---------- 01 Select: a helix, labels fall out ---------- */
 (() => {
   const stage = document.querySelector('[data-stage="select"]');
-  const wrap = stage.querySelector('[data-arc]');
-  const trigger = stage.querySelector('[data-arc-trigger]');
-  const valueEl = stage.querySelector('[data-arc-value]');
-  const options = [...stage.querySelectorAll('.arc-option')];
+  const wrap = stage.querySelector('[data-select]');
+  const trigger = stage.querySelector('[data-select-trigger]');
+  const valueEl = stage.querySelector('[data-select-value]');
+  const helix = stage.querySelector('[data-helix]');
+  const options = [...helix.querySelectorAll('.helix-option')];
+  const stepAngle = 40;
+  const stepY = 48;
   let open = false;
   let looseTimer;
+  let spin = 0;
+  let paused = false;
+  let focusTarget = null;
+  let last = performance.now();
 
-  const sweep = 70;
-  const tilt = 0.35;
-  const cy = trigger.offsetHeight + 10;
-  wrap.style.setProperty('--y0', `${cy}px`);
+  options.forEach((o, i) => {
+    o.__a = i * stepAngle;
+    o.style.setProperty('--a', `${o.__a}deg`);
+    o.style.setProperty('--y', `${i * stepY}px`);
+    o.style.setProperty('--i', i);
+  });
 
-  // The arc's radius follows the space available, so it fits a phone too
-  function layout() {
-    const room = stage.clientWidth - wrap.offsetLeft - 200;
-    const R = Math.max(190, Math.min(300, room / (1 - Math.cos((sweep * Math.PI) / 180))));
-    options.forEach((o, i) => {
-      const deg = (i * sweep) / (options.length - 1);
-      const th = ((180 - deg) * Math.PI) / 180;
-      o.style.setProperty('--x', `${R + R * Math.cos(th)}px`);
-      o.style.setProperty('--y', `${cy + R * Math.sin(th)}px`);
-      o.style.setProperty('--rot', `${deg * tilt}deg`);
-      o.style.setProperty('--i', i);
-      o.__rot = deg * tilt;
-    });
+  const facing = (o) => Math.cos(((o.__a + spin) * Math.PI) / 180) > 0.6;
+
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (focusTarget != null) {
+      const delta = ((focusTarget - spin + 540) % 360) - 180;
+      spin += delta * 0.14;
+    } else if (!paused && !reduced) {
+      spin -= 16 * dt;
+    }
+    helix.style.transform = `rotateY(${spin}deg)`;
+    requestAnimationFrame(frame);
   }
-  layout();
-  window.addEventListener('resize', layout);
+  requestAnimationFrame(frame);
+
+  helix.addEventListener('pointerenter', () => { paused = true; });
+  helix.addEventListener('pointerleave', () => { paused = false; });
 
   function setOpen(next, focusFirst = false) {
     open = next;
     wrap.classList.toggle('open', next);
     trigger.setAttribute('aria-expanded', String(next));
     clearTimeout(looseTimer);
+    if (!next) focusTarget = null;
     if (next) {
-      looseTimer = setTimeout(loosen, 1600);
-      if (focusFirst) setTimeout(() => (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus(), 50);
+      looseTimer = setTimeout(loosen, 1800);
+      if (focusFirst) setTimeout(() => (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus(), 60);
     }
   }
 
   function loosen() {
     if (!open) return;
-    const attached = options.filter((o) => o.querySelector('.opt-label'));
-    if (attached.length) {
-      const o = pick(attached);
+    const candidates = options.filter((o) => o.querySelector('.opt-label') && facing(o));
+    if (candidates.length) {
+      const o = pick(candidates);
       const label = o.querySelector('.opt-label');
       label.classList.add('loose');
       setTimeout(() => {
         label.classList.remove('loose');
         if (!open || label.parentNode !== o) return;
         detach(label, stage, {
-          rotation: o.__rot,
-          vx: rand(-30, 90),
+          vx: rand(-60, 60),
           vy: -20,
           vr: rand(-90, 90),
+          vrx: rand(-200, 200),
+          vry: rand(-300, 300),
           onRestore: (b) => o.appendChild(b.el),
         });
       }, reduced ? 0 : 420);
     }
-    looseTimer = setTimeout(loosen, rand(1300, 2200));
+    looseTimer = setTimeout(loosen, rand(1200, 2000));
   }
 
   function choose(o) {
@@ -325,6 +361,9 @@ document.addEventListener('keydown', (e) => {
   });
   options.forEach((o, i) => {
     o.addEventListener('click', () => choose(o));
+    // Keyboard focus turns the helix so the focused option faces you
+    o.addEventListener('focus', () => { focusTarget = -o.__a; });
+    o.addEventListener('blur', () => { focusTarget = null; });
     o.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown') { e.preventDefault(); options[Math.min(i + 1, options.length - 1)].focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); options[Math.max(i - 1, 0)].focus(); }
@@ -340,26 +379,28 @@ document.addEventListener('keydown', (e) => {
   stage.__beforeRepair = () => { if (!open) setOpen(true); };
 })();
 
-/* ---------- 02 Button: shatters on press ---------- */
+/* ---------- 02 Button: a key that shatters in 3D ---------- */
 (() => {
   const stage = document.querySelector('[data-stage="button"]');
   const btn = stage.querySelector('[data-shatter]');
+  const depth = 10;
   let broken = false;
 
   function shatter() {
     const sr = stage.getBoundingClientRect();
     const br = btn.getBoundingClientRect();
     const W = btn.offsetWidth;
-    const H = btn.offsetHeight;
+    const H = btn.offsetHeight + depth;
     const left = br.left + br.width / 2 - sr.left - W / 2;
-    const top = br.top + br.height / 2 - sr.top - H / 2;
-    const c = [W * rand(0.4, 0.6), H * rand(0.35, 0.65)];
+    const top = br.top - sr.top;
+    const c = [W * rand(0.4, 0.6), H * rand(0.35, 0.6)];
     const rim = [
       [0, 0], [W * rand(0.22, 0.42), 0], [W, 0], [W, H * rand(0.35, 0.7)],
       [W, H], [W * rand(0.5, 0.78), H], [0, H], [0, H * rand(0.3, 0.6)],
     ];
     const shards = [[1, 2, 3], [3, 4, 5], [5, 6, 7], [7, 0, 1]].map((idx) => [c, ...idx.map((i) => rim[i])]);
 
+    btn.classList.remove('pressed');
     shards.forEach((pts) => {
       const xs = pts.map((p) => p[0]);
       const ys = pts.map((p) => p[1]);
@@ -376,7 +417,9 @@ document.addEventListener('keydown', (e) => {
       inner.style.left = `${-bx}px`;
       inner.style.top = `${-by}px`;
       inner.style.width = `${W}px`;
-      inner.style.height = `${H}px`;
+      inner.style.height = `${H - depth}px`;
+      // The key's side is part of the shard, so each piece keeps its thickness
+      inner.style.boxShadow = `0 ${depth}px 0 var(--accent-deep)`;
       inner.style.clipPath = `polygon(${pts.map((p) => `${p[0]}px ${p[1]}px`).join(', ')})`;
       shard.appendChild(inner);
       stage.appendChild(shard);
@@ -385,9 +428,11 @@ document.addEventListener('keydown', (e) => {
       addBody(shard, stage, {
         x: left + bx,
         y: top + by,
-        vx: mx * 5 + rand(-40, 40),
-        vy: -rand(200, 380) + my * 4,
+        vx: mx * 6 + rand(-60, 60),
+        vy: -rand(380, 620) + my * 5,
         vr: rand(-260, 260),
+        vrx: rand(-520, 520),
+        vry: rand(-520, 520),
         onRestore: (b) => b.el.remove(),
       });
     });
@@ -397,14 +442,15 @@ document.addEventListener('keydown', (e) => {
   function crack() {
     const sr = stage.getBoundingClientRect();
     const br = btn.getBoundingClientRect();
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('class', 'crack');
     svg.setAttribute('width', br.width);
     svg.setAttribute('height', br.height);
     svg.style.left = `${br.left - sr.left}px`;
     svg.style.top = `${br.top - sr.top}px`;
     const cx = br.width * 0.5, cy = br.height * 0.5;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const path = document.createElementNS(ns, 'path');
     path.setAttribute('d', `M${cx} ${cy} L${br.width * 0.3} 0 M${cx} ${cy} L${br.width} ${br.height * 0.55} M${cx} ${cy} L${br.width * 0.65} ${br.height} M${cx} ${cy} L0 ${br.height * 0.45}`);
     svg.appendChild(path);
     stage.appendChild(svg);
@@ -414,8 +460,11 @@ document.addEventListener('keydown', (e) => {
   btn.addEventListener('click', () => {
     if (broken) return;
     broken = true;
-    const lines = crack();
-    setTimeout(() => { lines.remove(); shatter(); }, reduced ? 0 : 160);
+    btn.classList.add('pressed');
+    setTimeout(() => {
+      const lines = crack();
+      setTimeout(() => { lines.remove(); shatter(); }, reduced ? 0 : 170);
+    }, reduced ? 0 : 90);
   });
 
   stage.__afterRepair = () => {
@@ -424,7 +473,7 @@ document.addEventListener('keydown', (e) => {
   };
 })();
 
-/* ---------- 03 Switch: the knob overshoots the track ---------- */
+/* ---------- 03 Switch: the sphere overshoots the track ---------- */
 (() => {
   const stage = document.querySelector('[data-stage="switch"]');
   const sw = stage.querySelector('[data-switch]');
@@ -438,75 +487,100 @@ document.addEventListener('keydown', (e) => {
       if (sw.getAttribute('aria-checked') !== 'true' || knob.parentNode !== sw) return;
       detach(knob, stage, {
         round: true,
-        vx: 340,
-        vy: -50,
+        vx: 360,
+        vy: -60,
         onRestore: (b) => sw.appendChild(b.el),
       });
     }, reduced ? 0 : 190);
   });
 })();
 
-/* ---------- 04 Text field: letters fall out ---------- */
+/* ---------- 04 Text field: a solid you can turn ---------- */
 (() => {
   const stage = document.querySelector('[data-stage="field"]');
-  const input = stage.querySelector('[data-leaky]');
-  const mirror = stage.querySelector('[data-mirror]');
-  const lost = [];
+  const box = stage.querySelector('[data-box]');
+  const input = stage.querySelector('[data-field-input]');
+  const backText = stage.querySelector('[data-back-text]');
+  const rest = { x: -16, y: -24 };
+  let rx = rest.x, ry = rest.y;
+  let vrx = 0, vry = 0;
+  let down = null;
+  let dragging = false;
+  let idleSince = performance.now();
+  let returning = false;
 
-  function renderMirror() {
-    mirror.textContent = '';
-    for (const ch of input.value.split('')) {
-      const s = document.createElement('span');
-      s.className = 'ch';
-      s.textContent = ch;
-      mirror.appendChild(s);
+  input.addEventListener('input', () => {
+    backText.textContent = input.value || input.placeholder;
+  });
+
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, id: e.pointerId };
+    dragging = false;
+  });
+
+  stage.addEventListener('pointermove', (e) => {
+    if (!down) return;
+    if (!dragging && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) {
+      dragging = true;
+      returning = false;
+      stage.setPointerCapture(e.pointerId);
+      stage.classList.add('dragging');
+      input.blur();
+      window.getSelection()?.removeAllRanges();
+      markDirty(stage);
     }
-    mirror.scrollLeft = input.scrollLeft;
-  }
+    if (!dragging) return;
+    e.preventDefault();
+    vry = (e.clientX - down.lx) * 0.5;
+    vrx = -(e.clientY - down.ly) * 0.5;
+    ry += vry;
+    rx += vrx;
+    down.lx = e.clientX;
+    down.ly = e.clientY;
+  });
 
-  function loosen() {
-    const chars = input.value.split('');
-    const candidates = chars.map((c, i) => (c.trim() ? i : -1)).filter((i) => i >= 0);
-    if (candidates.length < 2 || Math.random() < 0.35) return;
-    const idx = pick(candidates);
-    const span = mirror.children[idx];
-    span.classList.add('loose');
-    setTimeout(() => {
-      if (mirror.children[idx] !== span) return;
-      span.classList.remove('loose');
-      const ch = span.textContent;
-      detach(span, stage, {
-        vx: rand(-60, 60),
-        vy: -30,
-        vr: rand(-200, 200),
-        onRestore: (b) => b.el.remove(),
-      });
-      const caret = input.selectionStart;
-      const v = input.value;
-      input.value = v.slice(0, idx) + v.slice(idx + 1);
-      lost.push({ ch, idx });
-      renderMirror();
-      if (document.activeElement === input && caret != null) {
-        const pos = caret > idx ? caret - 1 : caret;
-        input.setSelectionRange(pos, pos);
+  const release = () => {
+    down = null;
+    if (!dragging) return;
+    dragging = false;
+    stage.classList.remove('dragging');
+    idleSince = performance.now();
+    if (reduced) { vrx = 0; vry = 0; }
+  };
+  stage.addEventListener('pointerup', release);
+  stage.addEventListener('pointercancel', release);
+
+  // A double click puts it back facing you
+  stage.addEventListener('dblclick', (e) => {
+    if (e.target !== input) repair(stage);
+  });
+
+  function frame(now) {
+    if (!dragging) {
+      rx += vrx;
+      ry += vry;
+      vrx *= 0.95;
+      vry *= 0.95;
+      const slow = Math.abs(vrx) + Math.abs(vry) < 0.1;
+      if (returning || (slow && now - idleSince > 2500)) {
+        const k = returning ? 0.1 : 0.03;
+        const tx = rest.x + nearest(rx - rest.x, 360);
+        const ty = rest.y + nearest(ry - rest.y, 360);
+        rx += (tx - rx) * k;
+        ry += (ty - ry) * k;
+        if (Math.abs(tx - rx) + Math.abs(ty - ry) < 0.2) returning = false;
       }
-    }, reduced ? 0 : 450);
-  }
-
-  input.addEventListener('input', renderMirror);
-  input.addEventListener('scroll', () => { mirror.scrollLeft = input.scrollLeft; });
-  setInterval(loosen, 1500);
-
-  // Letters go back in the reverse order they fell out
-  stage.__afterRepair = () => {
-    let v = input.value;
-    while (lost.length) {
-      const { ch, idx } = lost.pop();
-      const i = Math.min(idx, v.length);
-      v = v.slice(0, i) + ch + v.slice(i);
     }
-    input.value = v;
-    renderMirror();
+    box.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  stage.__afterRepair = () => {
+    vrx = 0;
+    vry = 0;
+    returning = true;
   };
 })();
 
@@ -516,27 +590,35 @@ document.addEventListener('keydown', (e) => {
   const rope = stage.querySelector('[data-rope]');
   const input = stage.querySelector('[data-rope-input]');
   const handle = stage.querySelector('[data-rope-handle]');
-  const pathA = stage.querySelector('[data-rope-a]');
-  const pathB = stage.querySelector('[data-rope-b]');
+  const paths = ['a', 'b', 'sa', 'sb'].map((k) => stage.querySelector(`[data-rope-${k}]`));
   const out = stage.querySelector('[data-rope-out]');
   const y0 = 30;
-  const radius = 14;
+  const radius = 16;
   let sag = 0;
   let vel = 0;
   let energy = 0;
   let last = Number(input.value);
   let snapped = null;
 
+  function draw(a, b) {
+    paths[0].setAttribute('d', a);
+    paths[1].setAttribute('d', b);
+    paths[2].setAttribute('d', a);
+    paths[3].setAttribute('d', b);
+  }
+
   function frame(now) {
     const W = rope.clientWidth;
     const x = (input.value / 100) * W;
     if (!snapped) {
-      const target = 110 * Math.sin((Math.PI * input.value) / 100);
+      const target = 115 * Math.sin((Math.PI * input.value) / 100);
       vel = (vel + (target - sag) * 0.09) * 0.86;
       sag += reduced ? target - sag : vel;
       const hy = y0 + sag;
-      pathA.setAttribute('d', `M0 ${y0} C ${x * 0.45} ${y0} ${x * 0.7} ${hy} ${x} ${hy}`);
-      pathB.setAttribute('d', `M${x} ${hy} C ${x + (W - x) * 0.3} ${hy} ${x + (W - x) * 0.55} ${y0} ${W} ${y0}`);
+      draw(
+        `M0 ${y0} C ${x * 0.45} ${y0} ${x * 0.7} ${hy} ${x} ${hy}`,
+        `M${x} ${hy} C ${x + (W - x) * 0.3} ${hy} ${x + (W - x) * 0.55} ${y0} ${W} ${y0}`,
+      );
       if (handle.parentNode === rope) handle.style.transform = `translate(${x - radius}px, ${hy - radius}px)`;
       energy *= 0.965;
     } else {
@@ -548,8 +630,10 @@ document.addEventListener('keydown', (e) => {
       const ly = lerp(snapped.y, y0 + Math.min(snapped.x * 0.9, 400), e);
       const rx = lerp(snapped.x, W - 6 - sway, e);
       const ry = lerp(snapped.y, y0 + Math.min((W - snapped.x) * 0.9, 400), e);
-      pathA.setAttribute('d', `M0 ${y0} Q ${lx * 0.5} ${(y0 + ly) / 2 + 12} ${lx} ${ly}`);
-      pathB.setAttribute('d', `M${W} ${y0} Q ${W - (W - rx) * 0.5} ${(y0 + ry) / 2 + 12} ${rx} ${ry}`);
+      draw(
+        `M0 ${y0} Q ${lx * 0.5} ${(y0 + ly) / 2 + 12} ${lx} ${ly}`,
+        `M${W} ${y0} Q ${W - (W - rx) * 0.5} ${(y0 + ry) / 2 + 12} ${rx} ${ry}`,
+      );
     }
     requestAnimationFrame(frame);
   }
@@ -589,21 +673,21 @@ document.addEventListener('keydown', (e) => {
   const stage = document.querySelector('[data-stage="checkbox"]');
   const input = stage.querySelector('[data-vine-input]');
   const svg = stage.querySelector('[data-vine-svg]');
-  const path = stage.querySelector('[data-vine-path]');
-  let anim;
+  const lines = [stage.querySelector('[data-vine-path]'), stage.querySelector('[data-vine-shadow]')];
+  let anims = [];
 
   function vine() {
-    const sr = stage.getBoundingClientRect();
-    const br = input.getBoundingClientRect();
-    const W = sr.width, H = sr.height;
+    const W = stage.clientWidth, H = stage.clientHeight;
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-    const x = br.left - sr.left, y = br.top - sr.top, s = br.width;
+    const x = input.offsetLeft + input.parentNode.offsetLeft;
+    const y = input.offsetTop + input.parentNode.offsetTop;
+    const s = input.offsetWidth;
     const pts = [[x + s * 0.2, y + s * 0.52], [x + s * 0.42, y + s * 0.74], [x + s * 0.8, y + s * 0.24]];
     let ang = -0.9;
     let p = pts[2];
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 11; i++) {
       ang += rand(-1.1, 1.1);
-      const len = rand(60, 120);
+      const len = rand(60, 130);
       let nx = p[0] + Math.cos(ang) * len;
       let ny = p[1] + Math.sin(ang) * len;
       if (nx < 24 || nx > W - 24) { ang = Math.PI - ang; nx = Math.min(W - 24, Math.max(24, nx)); }
@@ -620,24 +704,32 @@ document.addEventListener('keydown', (e) => {
     return d;
   }
 
+  function animate(from, to, duration, easing) {
+    anims.forEach((a) => a.cancel());
+    anims = lines.map((l) => l.animate(
+      [{ strokeDashoffset: from }, { strokeDashoffset: to }],
+      { duration: reduced ? 0 : duration, easing, fill: 'forwards' },
+    ));
+  }
+
   input.addEventListener('change', () => {
-    anim?.cancel();
     if (input.checked) {
-      path.setAttribute('d', vine());
-      const L = path.getTotalLength();
-      path.style.strokeDasharray = `${L}`;
-      path.style.strokeDashoffset = '0';
-      anim = path.animate(
-        [{ strokeDashoffset: L }, { strokeDashoffset: 0 }],
-        { duration: reduced ? 0 : 3400, easing: 'cubic-bezier(.25,.7,.3,1)', fill: 'forwards' },
-      );
+      const d = vine();
+      lines.forEach((l) => l.setAttribute('d', d));
+      const L = lines[0].getTotalLength();
+      lines.forEach((l) => { l.style.strokeDasharray = `${L}`; });
+      animate(L, 0, 3600, 'cubic-bezier(.25,.7,.3,1)');
+      markDirty(stage);
     } else {
-      const L = path.getTotalLength();
-      path.style.strokeDashoffset = `${L}`;
-      anim = path.animate(
-        [{ strokeDashoffset: 0 }, { strokeDashoffset: L }],
-        { duration: reduced ? 0 : 700, easing: 'ease-in', fill: 'forwards' },
-      );
+      const L = lines[0].getTotalLength();
+      animate(0, L, 700, 'ease-in');
+      markDirty(stage, false);
     }
   });
+
+  stage.__afterRepair = () => {
+    if (!input.checked) return;
+    input.checked = false;
+    input.dispatchEvent(new Event('change'));
+  };
 })();

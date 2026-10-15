@@ -7,10 +7,10 @@
   <meta name="description" content="Ordinary interface components under slightly wrong conditions. Interface studies by Vemund Due Thorén.">
   <meta property="og:title" content="Interface studies · Vemund Due Thorén">
   <meta property="og:description" content="Ordinary components, slightly wrong conditions.">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='5' y='9' width='22' height='14' rx='3' fill='%232a3fd6' transform='rotate(-12 16 16)'/></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='6' y='12' width='22' height='12' rx='3' fill='%231a25a8' transform='rotate(-12 16 16)'/><rect x='5' y='8' width='22' height='12' rx='3' fill='%232b3cff' transform='rotate(-12 16 16)'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -25,50 +25,56 @@
   <main class="wrap">
     <section class="intro">
       <p class="eyebrow">Interface studies · 2026</p>
-      <h1>Ordinary components, slightly wrong conditions.</h1>
-      <p>Six standard interface elements, each doing its job under a small change in physics. They keep their function, their labels and their keyboard support. Not all of them keep their shape.</p>
-      <p class="byline">Anything that breaks can be repaired with the glue in the corner.</p>
+      <h1 data-extrude>Ordinary components, slightly wrong conditions.</h1>
+      <p>Six standard interface elements under a small change in physics. They keep their function, their labels and their keyboard support. Not all of them keep their shape.</p>
+      <p class="byline">By Vemund Due Thorén, product &amp; UX design.</p>
     </section>
 
     <section class="exhibits">
       <!-- 01 Select -->
       <article class="exhibit">
-        <div class="stage" data-stage="select">
-          <div class="arc-select" data-arc>
-            <button class="arc-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="arc-list" data-arc-trigger>
-              <span data-arc-value>Choose a city</span>
-              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5l4 3.5 4-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-            </button>
-            <ul class="arc-list" id="arc-list" role="listbox" aria-label="City" data-arc-list>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Stockholm"><span class="opt-label">Stockholm</span></li>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Oslo"><span class="opt-label">Oslo</span></li>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Copenhagen"><span class="opt-label">Copenhagen</span></li>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Helsinki"><span class="opt-label">Helsinki</span></li>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Reykjavík"><span class="opt-label">Reykjavík</span></li>
-              <li class="arc-option" role="option" tabindex="-1" aria-selected="false" aria-label="Tallinn"><span class="opt-label">Tallinn</span></li>
-            </ul>
+        <div class="frame">
+          <div class="stage" data-stage="select">
+            <div class="helix-select" data-select>
+              <button class="select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-controls="helix-list" data-select-trigger>
+                <span data-select-value>Choose a city</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5l4 3.5 4-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+              </button>
+              <ul class="helix" id="helix-list" role="listbox" aria-label="City" data-helix>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Stockholm"><span class="opt-label">Stockholm</span></li>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Oslo"><span class="opt-label">Oslo</span></li>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Copenhagen"><span class="opt-label">Copenhagen</span></li>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Helsinki"><span class="opt-label">Helsinki</span></li>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Reykjavík"><span class="opt-label">Reykjavík</span></li>
+                <li class="helix-option" role="option" tabindex="-1" aria-selected="false" aria-label="Tallinn"><span class="opt-label">Tallinn</span></li>
+              </ul>
+            </div>
           </div>
+          <button class="reset" type="button" aria-label="Reset select" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">01</span>
           <div>
             <h2>Select</h2>
-            <p>Opens along an arc. The labels are only loosely attached to their options.</p>
+            <p>Opens as a slowly turning helix. The labels are only loosely attached to their options.</p>
           </div>
-          <span class="material">Listbox, arc, gravity</span>
+          <span class="material">Listbox, helix, gravity</span>
         </div>
       </article>
 
       <!-- 02 Button -->
       <article class="exhibit">
-        <div class="stage" data-stage="button">
-          <button class="solid" type="button" data-shatter>Confirm</button>
+        <div class="frame">
+          <div class="stage" data-stage="button">
+            <button class="solid" type="button" data-shatter>Confirm</button>
+          </div>
+          <button class="reset" type="button" aria-label="Reset button" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">02</span>
           <div>
             <h2>Button</h2>
-            <p>A primary action. Pressing it is final.</p>
+            <p>A primary action with real depth. Pressing it is final.</p>
           </div>
           <span class="material">Button, four fractures</span>
         </div>
@@ -76,11 +82,14 @@
 
       <!-- 03 Switch -->
       <article class="exhibit">
-        <div class="stage" data-stage="switch">
-          <div class="switch-row">
-            <button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="switch-label" data-switch><span class="switch-knob" data-knob></span></button>
-            <span id="switch-label">Notifications</span>
+        <div class="frame">
+          <div class="stage" data-stage="switch">
+            <div class="switch-row">
+              <button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="switch-label" data-switch><span class="switch-knob" data-knob></span></button>
+              <span id="switch-label">Notifications</span>
+            </div>
           </div>
+          <button class="reset" type="button" aria-label="Reset switch" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">03</span>
@@ -88,45 +97,57 @@
             <h2>Switch</h2>
             <p>Turning it on requires slightly more travel than the track provides.</p>
           </div>
-          <span class="material">Switch, round body</span>
+          <span class="material">Switch, sphere</span>
         </div>
       </article>
 
       <!-- 04 Text field -->
       <article class="exhibit">
-        <div class="stage" data-stage="field">
-          <div class="leaky">
-            <label for="leaky-input">Name</label>
-            <div class="leaky-box">
-              <input id="leaky-input" type="text" maxlength="22" autocomplete="off" spellcheck="false" placeholder="Write something" data-leaky>
-              <div class="mirror" aria-hidden="true" data-mirror></div>
+        <div class="frame">
+          <div class="stage stage-drag" data-stage="field">
+            <div class="field3d" data-field3d>
+              <div class="box" data-box>
+                <div class="face front"><input id="field3d-input" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="Write something" data-field-input></div>
+                <div class="face back" aria-hidden="true"><span data-back-text>Write something</span></div>
+                <div class="face top"><label for="field3d-input">Name</label></div>
+                <div class="face bottom" aria-hidden="true"></div>
+                <div class="face left" aria-hidden="true"></div>
+                <div class="face right" aria-hidden="true"></div>
+              </div>
+              <div class="box-shadow" aria-hidden="true"></div>
             </div>
+            <p class="stage-hint">Drag to turn</p>
           </div>
+          <button class="reset" type="button" aria-label="Reset text field" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">04</span>
           <div>
             <h2>Text field</h2>
-            <p>Accepts input. Retention is limited.</p>
+            <p>Accepts input. Can be examined from every side.</p>
           </div>
-          <span class="material">Input, letters, gravity</span>
+          <span class="material">Input, six faces</span>
         </div>
       </article>
 
       <!-- 05 Slider -->
       <article class="exhibit">
-        <div class="stage" data-stage="slider">
-          <div class="rope-wrap">
-            <div class="rope" data-rope>
-              <svg aria-hidden="true">
-                <path data-rope-a />
-                <path data-rope-b />
-              </svg>
-              <span class="rope-handle" data-rope-handle></span>
-              <input type="range" min="0" max="100" value="30" aria-label="Load" data-rope-input>
+        <div class="frame">
+          <div class="stage" data-stage="slider">
+            <div class="rope-wrap">
+              <div class="rope" data-rope>
+                <svg aria-hidden="true">
+                  <g class="rope-shadow"><path data-rope-sa /><path data-rope-sb /></g>
+                  <path data-rope-a />
+                  <path data-rope-b />
+                </svg>
+                <span class="rope-handle" data-rope-handle></span>
+                <input type="range" min="0" max="100" value="30" aria-label="Load" data-rope-input>
+              </div>
+              <p class="rope-meta">Load <output data-rope-out>30 kg</output></p>
             </div>
-            <p class="rope-meta">Load <output data-rope-out>30 kg</output></p>
           </div>
+          <button class="reset" type="button" aria-label="Reset slider" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">05</span>
@@ -140,12 +161,18 @@
 
       <!-- 06 Checkbox -->
       <article class="exhibit">
-        <div class="stage" data-stage="checkbox">
-          <label class="vine-check">
-            <input type="checkbox" data-vine-input>
-            <span>Keep me signed in</span>
-          </label>
-          <svg class="vine-svg" aria-hidden="true" data-vine-svg><path data-vine-path /></svg>
+        <div class="frame">
+          <div class="stage" data-stage="checkbox">
+            <label class="vine-check">
+              <input type="checkbox" data-vine-input>
+              <span>Keep me signed in</span>
+            </label>
+            <svg class="vine-svg" aria-hidden="true" data-vine-svg>
+              <path class="vine-shadow" data-vine-shadow />
+              <path class="vine-line" data-vine-path />
+            </svg>
+          </div>
+          <button class="reset" type="button" aria-label="Reset checkbox" data-reset>↺ Reset</button>
         </div>
         <div class="placard">
           <span class="no">06</span>
@@ -161,31 +188,18 @@
     <section class="notes" id="notes">
       <h2>Notes</h2>
       <ol>
-        <li><strong>Every break is reversible.</strong> The glue is an undo with a physical form: pick it up and apply it where the damage is.</li>
+        <li><strong>Everything is reversible.</strong> When something breaks, a reset appears next to it and puts every piece back where it came from.</li>
         <li><strong>Semantics stay intact.</strong> Assistive technology meets an ordinary listbox, switch, field and checkbox, whatever the pixels are doing.</li>
-        <li><strong>The keyboard works throughout.</strong> Activating the glue from the keyboard repairs everything at once.</li>
+        <li><strong>The 3D is real DOM.</strong> No canvas, no WebGL. The text field you turn around is a real input, with focus, selection and a label.</li>
         <li><strong>Reduced motion is respected.</strong> Things still break. They just don't perform it.</li>
       </ol>
     </section>
 
     <footer class="footer">
       <span>Vemund Due Thorén</span>
-      <span>HTML, CSS and a small physics loop. No libraries.</span>
+      <span>HTML, CSS 3D transforms and a small physics loop. No libraries.</span>
     </footer>
   </main>
-
-  <button class="glue" type="button" aria-pressed="false" aria-label="Glue. Pick up, then click something broken to repair it." data-glue>
-    <svg viewBox="0 0 140 56" aria-hidden="true">
-      <path d="M6 14 L22 16 L22 40 L6 42 Z" fill="#c9c4b8"/>
-      <path d="M6 18 L22 19 M6 23 L22 23.5 M6 28 L22 28 M6 33 L22 32.5 M6 38 L22 37" stroke="#a8a294" stroke-width="1"/>
-      <path d="M22 16 C 56 11, 84 13, 98 20 L 98 36 C 84 43, 56 45, 22 40 Z" fill="#fbfaf6" stroke="#cfc9bd"/>
-      <path d="M40 14.5 C 52 13.2, 64 13.2, 74 14 L 74 42 C 64 42.8, 52 42.8, 40 41.5 Z" fill="#f2c230"/>
-      <text x="57" y="31.5" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="#1d1d1d" letter-spacing="1">GLUE</text>
-      <path d="M98 21 L108 23.5 L108 32.5 L98 35 Z" fill="#dcd7cc"/>
-      <g class="glue-cap"><rect x="108" y="20" width="22" height="16" rx="3" fill="#1d1d1d"/><path d="M112 20 V36 M116 20 V36 M120 20 V36 M124 20 V36" stroke="#3a3a3a" stroke-width="1"/></g>
-    </svg>
-  </button>
-  <p class="glue-hint" data-glue-hint>Something came loose. Pick up the glue, then click where it broke.</p>
 
   <script src="main.js"></script>
 </body>
